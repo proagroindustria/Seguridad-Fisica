@@ -5,8 +5,9 @@ const path = require('path');
 
 const authRoutes      = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
-const permisosRoutes  = require('./routes/permisos');
+const solicitudesRoutes  = require('./routes/permisos');
 const { router: facialRoutes } = require('./routes/facial');
+const documentosRoutes = require('./routes/documentos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,8 +36,30 @@ app.use(session({
 // Rutas
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
-app.use('/permisos', permisosRoutes);
+app.use('/solicitudes', solicitudesRoutes);
 app.use('/facial', facialRoutes);
+app.use('/documentos', documentosRoutes);
+
+app.get('/personal', (req, res) => {
+  if (!req.session.user) return res.redirect('/login');
+  const rol = req.session.user.rol;
+  if (rol !== 'contratista' && rol !== 'seguridad_fisica') return res.redirect('/dashboard');
+  res.render('personal', { user: req.session.user });
+});
+
+
+app.get('/verificar', (req, res) => {
+  if (!req.session.user) return res.redirect('/login');
+  if (req.session.user.rol !== 'seguridad_fisica') return res.redirect('/dashboard');
+  res.render('verificar', { user: req.session.user });
+});
+
+app.get('/historial', (req, res) => {
+  if (!req.session.user) return res.redirect('/login');
+  if (req.session.user.rol !== 'seguridad_fisica') return res.redirect('/dashboard');
+  res.render('historial', { user: req.session.user });
+});
+
 
 // Ruta raíz
 app.get('/', (req, res) => {
@@ -48,7 +71,11 @@ app.get('/', (req, res) => {
 
 // 404
 app.use((req, res) => {
-  res.status(404).redirect('/login');
+  if (req.accepts('json')) {
+    res.status(404).json({ error: 'Ruta no encontrada' });
+  } else {
+    res.status(404).redirect('/login');
+  }
 });
 
 app.listen(PORT, () => {
@@ -56,4 +83,3 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
   console.log(`📋 Modo: ${process.env.OFFLINE_MODE === 'true' ? 'SIN BASE DE DATOS (offline)' : 'PostgreSQL'}\n`);
 });
-

@@ -2,7 +2,7 @@
    PROAGRO - Dashboard JS
 ===================================================== */
 
-let todosPermisos = [];
+let todosSolicitudes = [];
 let filtroActual = 'todos';
 let seccionesAgregadas = {};
 let dragType = null;
@@ -52,7 +52,7 @@ const SECTION_COLS = {
     { id: 'descripcion',  label: 'DESCRIPCIÓN',  placeholder: 'Nombre/desc.',    type: 'text',   required: true },
     { id: 'marca',        label: 'MARCA',        placeholder: 'Ej. Bosch',       type: 'text',   required: true },
     { id: 'modelo',       label: 'MODELO',       placeholder: 'Modelo',          type: 'text'                   },
-    { id: 'sucursal',     label: 'SUCURSAL',     placeholder: 'Sucursal',        type: 'text'                   },
+    { id: 'serie',     label: 'SERIE',     placeholder: 'Serie',        type: 'text'                   },
     { id: 'observaciones',label: 'OBSERVACIONES',placeholder: 'Notas...',        type: 'text'                   }
   ]
 };
@@ -76,23 +76,22 @@ function closeSidebar() {
 }
 
 // ===================== MODAL =====================
-function openModalPermiso() {
+function openModalSolicitud() {
   // Reset empleados cache al abrir modal
   empleadosCache = [];
   // Cargar empleados de la empresa del usuario al abrir el modal
   setTimeout(() => {
     const empInput = document.getElementById('empresa');
     if (empInput && empInput.value) {
-      // Contratista: ya tiene la empresa prellenada, cargar de inmediato
       cargarEmpleadosPorEmpresa(empInput.value);
     }
-    if (empInput) {
-      // Si el campo es editable (otros roles), cargar al cambiar
+    if (empInput && !empInput._listenerAdded) {
+      empInput._listenerAdded = true;
       empInput.addEventListener('input',  () => cargarEmpleadosPorEmpresa(empInput.value));
       empInput.addEventListener('change', () => cargarEmpleadosPorEmpresa(empInput.value));
     }
   }, 100);
-  const modal = document.getElementById('modalPermiso');
+  const modal = document.getElementById('modalSolicitud');
   if (!modal) return;
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -102,11 +101,11 @@ function openModalPermiso() {
 }
 
 function closeModal() {
-  const modal = document.getElementById('modalPermiso');
+  const modal = document.getElementById('modalSolicitud');
   if (!modal) return;
   modal.classList.remove('open');
   document.body.style.overflow = '';
-  document.getElementById('formPermiso').reset();
+  document.getElementById('formSolicitud').reset();
   document.getElementById('formDias').style.display = 'none';
   document.getElementById('modalAlert').style.display = 'none';
   document.getElementById('fechaHint').style.color = '';
@@ -248,13 +247,17 @@ function buildRowHTML(tipo, rowId, rowNum) {
         </label>
       </td>`;
     }
-    // Campo nombre en personal — sin autocompletado (se llena automático al agregar sección)
+    // Campo nombre en personal — con autocomplete al escribir
     if (tipo === 'personal' && c.id === 'nombre') {
-      return `<td>
+      return `<td style="position:relative">
         <input type="text" class="cell-input" placeholder="${c.placeholder||''}"
           ${c.required ? 'required' : ''}
           id="inp-${rowId}-nombre"
-          oninput="onCellChange('personal','${rowId}','nombre',this.value)">
+          autocomplete="off"
+          oninput="onNombreInput('${rowId}',this.value)"
+          onkeydown="onNombreKeydown(event,'${rowId}')"
+          onblur="setTimeout(()=>cerrarSugerencias('${rowId}'),300)">
+        <div id="sug-${rowId}" class="empleado-suggestions" style="display:none"></div>
       </td>`;
     }
     return `<td>
@@ -290,49 +293,8 @@ function agregarSeccion(tipo) {
   card.innerHTML = buildTableHTML(tipo);
   document.getElementById('dndDropZone').appendChild(card);
 
-  // Si es personal y hay empleados en cache, llenar automáticamente
-  if (tipo === 'personal' && empleadosCache.length > 0) {
-    empleadosCache.forEach(e => {
-      rowCounters.personal++;
-      const rowId  = `personal-${rowCounters.personal}`;
-      const tbody  = document.getElementById('tbody-personal');
-      const rowNum = tbody.rows.length + 1;
-
-      // Primero registrar en seccionesAgregadas ANTES de onCellChange
-      if (!Array.isArray(seccionesAgregadas.personal)) seccionesAgregadas.personal = [];
-      const rowData = {
-        _id:           rowId,
-        nombre:        `${e.nombre} ${e.apellido}`,
-        num_credencial: e.documento_identidad || '',
-        categoria:     e.cargo || '',
-      };
-      seccionesAgregadas.personal.push(rowData);
-
-      // Luego insertar HTML
-      tbody.insertAdjacentHTML('beforeend', buildRowHTML('personal', rowId, rowNum));
-
-      // Llenar inputs visualmente
-      const inpNombre = document.getElementById(`inp-${rowId}-nombre`);
-      if (inpNombre) inpNombre.value = `${e.nombre} ${e.apellido}`;
-
-      const tr = document.getElementById(`row-${rowId}`);
-      if (tr) {
-        const inputs = tr.querySelectorAll('.cell-input');
-        inputs.forEach(inp => {
-          if (inp.placeholder && inp.placeholder.includes('CRED')) {
-            inp.value = e.documento_identidad || '';
-          }
-          if (inp.placeholder && inp.placeholder.toLowerCase().includes('operador')) {
-            inp.value = e.cargo || '';
-          }
-        });
-      }
-      updateRowCount('personal');
-    });
-  } else {
-    // Sin empleados en cache: agregar fila vacía normal
-    addRow(tipo);
-  }
+  // Agregar fila vacía — el usuario escribe para buscar empleados
+  addRow(tipo);
 }
 
 // ── Autocomplete empleados ───────────────────────
@@ -350,21 +312,34 @@ function mostrarSugerencias(rowId) {
 
   if (!matches.length) { sugEl.style.display = 'none'; return; }
 
-  sugEl.innerHTML = matches.map(e => `
-    <div class="empleado-sug-item" onmousedown="seleccionarEmpleado('${rowId}',${JSON.stringify(JSON.stringify(e))})">
+  sugEl.innerHTML = matches.map((e, i) => {
+    const idx = empleadosCache.indexOf(e);
+    return `<div class="empleado-sug-item" data-idx="${idx}" onclick="seleccionarEmpleadoIdx('${rowId}',${idx})">
       <span class="sug-nombre">${e.nombre} ${e.apellido}</span>
       <span class="sug-meta">${e.area||''} · ${e.cargo||''}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   sugEl.style.display = 'block';
 }
 
 function onNombreInput(rowId, value) {
   onCellChange('personal', rowId, 'nombre', value);
+  if (!value || value.length < 1) {
+    const sugEl = document.getElementById(`sug-${rowId}`);
+    if (sugEl) sugEl.style.display = 'none';
+    return;
+  }
   mostrarSugerencias(rowId);
 }
 
-function seleccionarEmpleado(rowId, eJson) {
-  const e = JSON.parse(eJson);
+function seleccionarEmpleadoIdx(rowId, idx) {
+  const e = empleadosCache[idx];
+  if (!e) return;
+  seleccionarEmpleado(rowId, e);
+}
+
+function seleccionarEmpleado(rowId, e) {
+  if (typeof e === 'string') e = JSON.parse(e);
   // Llenar nombre
   const inpNombre = document.getElementById(`inp-${rowId}-nombre`);
   if (inpNombre) { inpNombre.value = `${e.nombre} ${e.apellido}`; }
@@ -391,6 +366,34 @@ function seleccionarEmpleado(rowId, eJson) {
 function cerrarSugerencias(rowId) {
   const sugEl = document.getElementById(`sug-${rowId}`);
   if (sugEl) sugEl.style.display = 'none';
+}
+
+function onNombreKeydown(event, rowId) {
+  const sugEl = document.getElementById(`sug-${rowId}`);
+  if (!sugEl || sugEl.style.display === 'none') return;
+  const items = sugEl.querySelectorAll('.empleado-sug-item');
+  const active = sugEl.querySelector('.empleado-sug-item.active');
+  let idx = Array.from(items).indexOf(active);
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    if (active) active.classList.remove('active');
+    idx = (idx + 1) % items.length;
+    items[idx].classList.add('active');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    if (active) active.classList.remove('active');
+    idx = (idx - 1 + items.length) % items.length;
+    items[idx].classList.add('active');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    const target = active || items[0];
+    if (target) { const idx = parseInt(target.dataset.idx); seleccionarEmpleadoIdx(rowId, idx); cerrarSugerencias(rowId); }
+  } else if (event.key === 'Escape') {
+    cerrarSugerencias(rowId);
+  }
 }
 
 function addRow(tipo) {
@@ -462,7 +465,7 @@ function importarExcel() {
 
 // ===================== FORM SUBMIT =====================
 document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('formPermiso');
+  const form = document.getElementById('formSolicitud');
   if (form) {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -479,31 +482,31 @@ document.addEventListener('DOMContentLoaded', () => {
         secciones: seccionesAgregadas
       };
       try {
-        const res = await fetch('/permisos', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch('/solicitudes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
         if (!result.success) { alertEl.textContent = result.error || 'Error.'; alertEl.style.display = 'block'; }
-        else { closeModal(); cargarPermisos(); }
+        else { closeModal(); cargarSolicitudes(); }
       } catch(err) {
         alertEl.textContent = 'Error de conexión.'; alertEl.style.display = 'block';
       } finally {
         btn.disabled = false;
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><polyline points="20,6 9,17 4,12"/></svg> CREAR PERMISO`;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><polyline points="20,6 9,17 4,12"/></svg> CREAR SOLICITUD`;
       }
     });
   }
-  cargarPermisos();
+  cargarSolicitudes();
 });
 
-// ===================== TABLA PERMISOS =====================
-async function cargarPermisos() {
+// ===================== TABLA SOLICITUDS =====================
+async function cargarSolicitudes() {
   const loading = document.getElementById('tableLoading');
   const table = document.getElementById('dataTable');
   const empty = document.getElementById('emptyState');
   loading.style.display = 'flex'; table.style.display = 'none'; empty.style.display = 'none';
   try {
-    const res = await fetch('/permisos');
+    const res = await fetch('/solicitudes');
     const result = await res.json();
-    if (result.success) { todosPermisos = result.data; renderTabla(todosPermisos); actualizarStats(todosPermisos); }
+    if (result.success) { todosSolicitudes = result.data; renderTabla(todosSolicitudes); actualizarStats(todosSolicitudes); }
   } catch(err) { console.error(err); }
   finally { loading.style.display = 'none'; }
 }
@@ -525,13 +528,13 @@ function puedeAprobar(estado) {
   return false;
 }
 
-function renderTabla(permisos) {
+function renderTabla(solicitudes) {
   const tbody = document.getElementById('tableBody');
   const table = document.getElementById('dataTable');
   const empty = document.getElementById('emptyState');
-  if (!permisos.length) { table.style.display='none'; empty.style.display='flex'; return; }
+  if (!solicitudes.length) { table.style.display='none'; empty.style.display='flex'; return; }
   table.style.display = 'table'; empty.style.display = 'none';
-  tbody.innerHTML = permisos.map(p => {
+  tbody.innerHTML = solicitudes.map(p => {
     const dias = Math.ceil((new Date(p.fecha_fin) - new Date(p.fecha_inicio)) / (1000*60*60*24));
     const info  = ESTADO_INFO[p.estado] || { label: p.estado, cls: 'status-pendiente' };
     const badge = `<span class="status-badge ${info.cls}"><span class="status-dot-sm"></span>${info.label}</span>`;
@@ -561,17 +564,17 @@ function setFilter(filtro, btn) {
 function filterTable() { aplicarFiltros(); }
 function aplicarFiltros() {
   const s = (document.getElementById('searchInput').value||'').toLowerCase();
-  let f = todosPermisos;
+  let f = todosSolicitudes;
   if (filtroActual !== 'todos') f = f.filter(p=>p.estado===filtroActual);
   if (s) f = f.filter(p=>p.empresa.toLowerCase().includes(s)||p.contrato.toLowerCase().includes(s)||p.folio.toLowerCase().includes(s));
   renderTabla(f);
 }
 
-async function aprobarPermiso(id) {
+async function aprobarSolicitud(id) {
   try {
-    const res = await fetch(`/permisos/${id}/aprobar`, { method:'PUT', headers:{'Content-Type':'application/json'} });
+    const res = await fetch(`/solicitudes/${id}/aprobar`, { method:'PUT', headers:{'Content-Type':'application/json'} });
     const r = await res.json();
-    if (r.success) cargarPermisos();
+    if (r.success) cargarSolicitudes();
     else alert(r.error || 'Error al aprobar.');
   } catch(e) { console.error(e); }
 }
@@ -580,16 +583,16 @@ async function aprobarPermiso(id) {
 function abrirRechazo(id) {
   const motivo = prompt('Motivo de rechazo (opcional):');
   if (motivo === null) return; // canceló
-  rechazarPermiso(id, motivo);
+  rechazarSolicitud(id, motivo);
 }
 
-async function rechazarPermiso(id, motivo) {
+async function rechazarSolicitud(id, motivo) {
   try {
-    const res = await fetch(`/permisos/${id}/rechazar`, {
+    const res = await fetch(`/solicitudes/${id}/rechazar`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ motivo })
     });
     const r = await res.json();
-    if (r.success) cargarPermisos();
+    if (r.success) cargarSolicitudes();
     else alert(r.error || 'Error al rechazar.');
   } catch(e) { console.error(e); }
 }
@@ -613,10 +616,10 @@ document.addEventListener('keydown', e => { if (e.key==='Escape') { closeSidebar
 // =====================================================
 // MODAL DETALLE
 // =====================================================
-let detallePermisoId = null;
+let detalleSolicitudId = null;
 
 async function verDetalle(id) {
-  detallePermisoId = id;
+  detalleSolicitudId = id;
   const modal    = document.getElementById('modalDetalle');
   const body     = document.getElementById('detalleBody');
   const folioEl  = document.getElementById('detalleFolio');
@@ -630,9 +633,9 @@ async function verDetalle(id) {
 
   try {
     const [res, resLotes, resAccesos] = await Promise.all([
-      fetch(`/permisos/${id}`),
-      fetch(`/permisos/${id}/lotes`),
-      fetch(`/permisos/${id}/accesos`)
+      fetch(`/solicitudes/${id}`),
+      fetch(`/solicitudes/${id}/lotes`),
+      fetch(`/solicitudes/${id}/accesos`)
     ]);
     if (!res.ok) { body.innerHTML = `<p style="padding:40px;color:var(--danger)">Error del servidor: ${res.status}</p>`; return; }
     const result     = await res.json();
@@ -641,9 +644,9 @@ async function verDetalle(id) {
     const accesosFaciales = accesosResult.success ? accesosResult.data : [];
     if (!result.success) { body.innerHTML = `<p style="padding:40px;color:var(--danger)">${result.error}</p>`; return; }
 
-    const { permiso, personal, vehiculos, equipos } = result.data;
+    const { solicitud, personal, vehiculos, equipos } = result.data;
     const lotes       = lotesResult.success ? lotesResult.data : [];
-    const puedeRegistrar = USER_ROL === 'seguridad_fisica' && permiso.estado === 'activo';
+    const puedeRegistrar = USER_ROL === 'seguridad_fisica' && solicitud.estado === 'activo';
 
     // Calcular totales ya registrados por equipo
     const salidasPorEquipo = {};
@@ -665,12 +668,12 @@ async function verDetalle(id) {
       });
     });
 
-    const info = ESTADO_INFO[permiso.estado] || { label: permiso.estado, cls: 'status-pendiente' };
-    folioEl.textContent = permiso.folio;
-    eyebrow.innerHTML = `PERMISO &nbsp;/&nbsp; <span class="status-badge ${info.cls}" style="font-size:10px;padding:2px 10px"><span class="status-dot-sm"></span>${info.label}</span>`;
+    const info = ESTADO_INFO[solicitud.estado] || { label: solicitud.estado, cls: 'status-pendiente' };
+    folioEl.textContent = solicitud.folio;
+    eyebrow.innerHTML = `SOLICITUD &nbsp;/&nbsp; <span class="status-badge ${info.cls}" style="font-size:10px;padding:2px 10px"><span class="status-dot-sm"></span>${info.label}</span>`;
 
     // Botones de acción según rol y estado
-    if (puedeAprobar(permiso.estado)) {
+    if (puedeAprobar(solicitud.estado)) {
       acciones.innerHTML = `
         <button class="btn-aprobar" onclick="aprobarDesdeDetalle()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px;height:15px"><polyline points="20,6 9,17 4,12"/></svg>
@@ -682,10 +685,10 @@ async function verDetalle(id) {
         </button>`;
     }
 
-    // Botón QR para permisos activos (todos los roles pueden verlo)
-    if (permiso.estado === 'activo') {
+    // Botón QR para solicitudes activos (todos los roles pueden verlo)
+    if (solicitud.estado === 'activo') {
       acciones.innerHTML += `
-        <button class="btn-qr" onclick="verQRPermiso(${permiso.id})">
+        <button class="btn-qr" onclick="verQRSolicitud(${solicitud.id})">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
             <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/>
@@ -706,15 +709,15 @@ async function verDetalle(id) {
           Datos Generales
         </div>
         <div class="detalle-grid">
-          <div class="detalle-field"><div class="detalle-field-label">FOLIO</div><div class="detalle-field-value mono">${permiso.folio}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">EMPRESA</div><div class="detalle-field-value">${escapeHtml(permiso.empresa)}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">CONTRATO</div><div class="detalle-field-value">${escapeHtml(permiso.contrato)}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">RESPONSABLE</div><div class="detalle-field-value">${escapeHtml(permiso.responsable_contrato)}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">FECHA INICIO</div><div class="detalle-field-value">${formatFecha(permiso.fecha_inicio)}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">FECHA FIN</div><div class="detalle-field-value">${formatFecha(permiso.fecha_fin)}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">CREADO POR</div><div class="detalle-field-value">${escapeHtml(permiso.creado_por_nombre||'—')}</div></div>
-          <div class="detalle-field"><div class="detalle-field-label">FECHA CREACIÓN</div><div class="detalle-field-value">${formatFecha(permiso.creado_en)}</div></div>
-          ${permiso.motivo_rechazo ? `<div class="detalle-field" style="grid-column:span 3"><div class="detalle-field-label" style="color:#ef4444">MOTIVO DE RECHAZO</div><div class="detalle-field-value" style="color:#ef4444">${escapeHtml(permiso.motivo_rechazo)}</div></div>` : ''}
+          <div class="detalle-field"><div class="detalle-field-label">FOLIO</div><div class="detalle-field-value mono">${solicitud.folio}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">EMPRESA</div><div class="detalle-field-value">${escapeHtml(solicitud.empresa)}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">CONTRATO</div><div class="detalle-field-value">${escapeHtml(solicitud.contrato)}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">RESPONSABLE</div><div class="detalle-field-value">${escapeHtml(solicitud.responsable_contrato)}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">FECHA INICIO</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_inicio)}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">FECHA FIN</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_fin)}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">CREADO POR</div><div class="detalle-field-value">${escapeHtml(solicitud.creado_por_nombre||'—')}</div></div>
+          <div class="detalle-field"><div class="detalle-field-label">FECHA CREACIÓN</div><div class="detalle-field-value">${formatFecha(solicitud.creado_en)}</div></div>
+          ${solicitud.motivo_rechazo ? `<div class="detalle-field" style="grid-column:span 3"><div class="detalle-field-label" style="color:#ef4444">MOTIVO DE RECHAZO</div><div class="detalle-field-value" style="color:#ef4444">${escapeHtml(solicitud.motivo_rechazo)}</div></div>` : ''}
         </div>
       </div>
 
@@ -724,7 +727,7 @@ async function verDetalle(id) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
           Flujo de Aprobación
         </div>
-        <div class="detalle-timeline">${buildTimeline(permiso)}</div>
+        <div class="detalle-timeline">${buildTimeline(solicitud)}</div>
       </div>
 
       <!-- PERSONAL -->
@@ -746,7 +749,11 @@ async function verDetalle(id) {
               ${puedeRegistrar ? `<td style="text-align:center">${yaSalio ? '' : `<input type="checkbox" class="chk-item" data-tipo="personal" data-id="${p.id}">`}</td>` : ''}
               <td style="color:var(--text-3);font-family:'Share Tech Mono',monospace">${i+1}</td>
               <td style="font-family:'Share Tech Mono',monospace;color:var(--accent)">${escapeHtml(p.num_credencial||'—')}</td>
-              <td style="color:var(--text);font-weight:500">${escapeHtml(p.nombre||'—')}</td>
+              <td style="color:var(--text);font-weight:500">
+                ${escapeHtml(p.nombre||'—')}
+                ${p.imss_vigente === false ? '<span style="font-size:10px;padding:2px 6px;border:1px solid #f59e0b;color:#f59e0b;margin-left:6px;font-family:Barlow Condensed,sans-serif">⚠ IMSS NO VIGENTE</span>' : ''}
+                ${p.imss_vigente === true ? '<span style="font-size:10px;padding:2px 6px;border:1px solid var(--success);color:var(--success);margin-left:6px;font-family:Barlow Condensed,sans-serif">✓ IMSS</span>' : ''}
+              </td>
               <td>${escapeHtml(p.categoria||'—')}</td>
               <td>${yaSalio ? '<span class="salida-badge salida-ok">✓ Registrado</span>' : '<span class="salida-badge" style="color:var(--text-3);border-color:var(--border)">Pendiente</span>'}</td>
             </tr>`;
@@ -813,7 +820,7 @@ async function verDetalle(id) {
         <table class="detalle-table">
           <thead><tr>
             ${puedeRegistrar ? '<th style="width:40px"></th>' : ''}
-            <th>#</th><th>DESCRIPCIÓN</th><th>MARCA</th><th>MÓDULO</th><th>AUTORIZADOS</th><th>YA SALIERON</th><th>DISPONIBLES</th>
+            <th>#</th><th>DESCRIPCIÓN</th><th>MARCA</th><th>MODELO</th><th>AUTORIZADOS</th><th>YA SALIERON</th><th>DISPONIBLES</th>
             ${puedeRegistrar ? '<th>CANT. A SACAR</th>' : ''}
           </tr></thead>
           <tbody>${equipos.map((e,i) => {
@@ -846,12 +853,21 @@ async function verDetalle(id) {
             <div class="detalle-field-label" style="margin-bottom:6px">OBSERVACIONES DEL LOTE (opcional)</div>
             <input type="text" id="lote-obs" class="form-input" placeholder="Ej: Salida para trabajo en bodega norte..." style="width:100%;max-width:500px">
           </div>
-          <button class="btn-registrar-lote" id="btnRegistrarLote" onclick="registrarLote(${permiso.id})">
+          <button class="btn-registrar-lote" id="btnRegistrarLote" onclick="registrarLote(${solicitud.id})">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             REGISTRAR SALIDA
           </button>
         </div>
         <div id="lote-feedback" style="margin-top:10px;font-size:13px;display:none"></div>
+      </div>` : ''}
+
+      <!-- BOTÓN CREDENCIALES PDF -->
+      ${solicitud.estado === 'activo' ? `
+      <div style="margin-bottom:16px">
+        <a href="/solicitudes/${solicitud.id}/credenciales" target="_blank"
+          style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:transparent;border:1.5px solid var(--accent);color:var(--accent);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-decoration:none">
+          📄 DESCARGAR CREDENCIALES PDF
+        </a>
       </div>` : ''}
 
       <!-- HISTORIAL DE LOTES -->
@@ -911,7 +927,7 @@ function toggleLote(id) {
 }
 
 // Registrar lote de salida
-async function registrarLote(permiso_id) {
+async function registrarLote(solicitud_id) {
   const items = [];
 
   // Recolectar checkboxes seleccionados
@@ -936,14 +952,14 @@ async function registrarLote(permiso_id) {
   if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
 
   try {
-    const res = await fetch(`/permisos/${permiso_id}/lote`, {
+    const res = await fetch(`/solicitudes/${solicitud_id}/lote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items, observaciones: obs })
     });
     const r = await res.json();
     if (r.success) {
-      verDetalle(permiso_id); // recargar modal
+      verDetalle(solicitud_id); // recargar modal
     } else {
       if (btn) { btn.disabled = false; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> REGISTRAR SALIDA`; }
       mostrarFeedback(r.error || 'Error al registrar.', 'error');
@@ -963,24 +979,24 @@ function mostrarFeedback(msg, tipo) {
   el.textContent = msg;
 }
 
-function buildTimeline(permiso) {
+function buildTimeline(solicitud) {
   const pasos = [
-    { label: 'Creado por Contratista',   estado: 'en_espera_area',       meta: permiso.creado_por_nombre,         fecha: permiso.creado_en },
-    { label: 'Revisión del Área',         estado: 'aprobado_area',         meta: permiso.aprobado_area_nombre,      fecha: permiso.fecha_aprobacion_area },
-    { label: 'Validación de Seguridad',   estado: 'activo',                meta: permiso.aprobado_seg_nombre,       fecha: permiso.fecha_aprobacion_seg },
+    { label: 'Creado por Contratista',   estado: 'en_espera_area',       meta: solicitud.creado_por_nombre,         fecha: solicitud.creado_en },
+    { label: 'Revisión del Área',         estado: 'aprobado_area',         meta: solicitud.aprobado_area_nombre,      fecha: solicitud.fecha_aprobacion_area },
+    { label: 'Validación de Seguridad',   estado: 'activo',                meta: solicitud.aprobado_seg_nombre,       fecha: solicitud.fecha_aprobacion_seg },
   ];
 
   const orden = ['en_espera_area','aprobado_area','en_espera_seguridad','activo'];
-  const idxActual = orden.indexOf(permiso.estado);
+  const idxActual = orden.indexOf(solicitud.estado);
 
   return pasos.map((paso, i) => {
     let dotClass = '';
     let icono = '○';
-    if (permiso.estado === 'rechazado' && i === (idxActual < 0 ? 1 : idxActual)) {
+    if (solicitud.estado === 'rechazado' && i === (idxActual < 0 ? 1 : idxActual)) {
       dotClass = 'rejected'; icono = '✕';
-    } else if (i < idxActual || permiso.estado === 'activo') {
+    } else if (i < idxActual || solicitud.estado === 'activo') {
       dotClass = 'done'; icono = '✓';
-    } else if (i === idxActual || (i === 0 && permiso.estado === 'en_espera_area')) {
+    } else if (i === idxActual || (i === 0 && solicitud.estado === 'en_espera_area')) {
       dotClass = 'active'; icono = '●';
     }
 
@@ -995,31 +1011,31 @@ function buildTimeline(permiso) {
 }
 
 function closeDetalle(e) {
-  if (e.target === e.currentTarget) closeDetalleBtn();
+  // Solo cierra con el botón X
 }
 function closeDetalleBtn() {
   document.getElementById('modalDetalle').classList.remove('open');
   document.body.style.overflow = '';
-  detallePermisoId = null;
+  detalleSolicitudId = null;
 }
 
 // Aprobar desde el modal de detalle
 async function aprobarDesdeDetalle() {
-  if (!detallePermisoId) return;
-  const id = detallePermisoId;
+  if (!detalleSolicitudId) return;
+  const id = detalleSolicitudId;
 
   try {
-    const res = await fetch(`/permisos/${id}/aprobar`, { method:'PUT', headers:{'Content-Type':'application/json'} });
+    const res = await fetch(`/solicitudes/${id}/aprobar`, { method:'PUT', headers:{'Content-Type':'application/json'} });
     const r = await res.json();
     if (!r.success) { alert(r.error || 'Error al aprobar.'); return; }
 
-    cargarPermisos();
+    cargarSolicitudes();
     closeDetalleBtn();
 
-    // Si es Seguridad Física y el permiso quedó Activo → generar QR
+    // Si es Seguridad Física y la solicitud quedó Activo → generar QR
     if (USER_ROL === 'seguridad_fisica' && r.data && r.data.estado === 'activo') {
       // Cargar detalle completo para el QR
-      const resD = await fetch(`/permisos/${id}`);
+      const resD = await fetch(`/solicitudes/${id}`);
       const detalle = await resD.json();
       if (detalle.success) {
         mostrarQR(detalle.data);
@@ -1038,24 +1054,24 @@ function closeMotivo() {
 }
 async function confirmarRechazo() {
   const motivo = document.getElementById('motivoTexto').value.trim();
-  if (!detallePermisoId) return;
-  await rechazarPermiso(detallePermisoId, motivo);
+  if (!detalleSolicitudId) return;
+  await rechazarSolicitud(detalleSolicitudId, motivo);
   closeMotivo();
   closeDetalleBtn();
 }
 
 // Mantener compatibilidad con botones viejos de la tabla
 function abrirRechazo(id) {
-  detallePermisoId = id;
+  detalleSolicitudId = id;
   abrirRechazoDetalle();
 }
 
 // =====================================================
 // BITÁCORA DE SALIDAS
 // =====================================================
-async function registrarSalida(permiso_id, tipo_item, item_id, cantidad) {
+async function registrarSalida(solicitud_id, tipo_item, item_id, cantidad) {
   try {
-    const res = await fetch(`/permisos/${permiso_id}/salida`, {
+    const res = await fetch(`/solicitudes/${solicitud_id}/salida`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo_item, item_id, cantidad: cantidad || 1, observaciones: null })
@@ -1063,7 +1079,7 @@ async function registrarSalida(permiso_id, tipo_item, item_id, cantidad) {
     const r = await res.json();
     if (r.success) {
       // Recargar el modal para reflejar cambios
-      verDetalle(permiso_id);
+      verDetalle(solicitud_id);
     } else {
       alert(r.error || 'Error al registrar salida.');
     }
@@ -1073,12 +1089,12 @@ async function registrarSalida(permiso_id, tipo_item, item_id, cantidad) {
   }
 }
 
-async function registrarSalidaEquipo(permiso_id, item_id, disponible) {
+async function registrarSalidaEquipo(solicitud_id, item_id, disponible) {
   const input = document.getElementById(`qty-${item_id}`);
   const cantidad = parseInt(input ? input.value : 1) || 1;
   if (cantidad < 1) { alert('La cantidad debe ser al menos 1.'); return; }
   if (cantidad > disponible) { alert(`Solo hay ${disponible} unidades disponibles.`); return; }
-  await registrarSalida(permiso_id, 'equipo', item_id, cantidad);
+  await registrarSalida(solicitud_id, 'equipo', item_id, cantidad);
 }
 
 function formatHora(f) {
@@ -1092,36 +1108,36 @@ function formatHora(f) {
 }
 
 // =====================================================
-// QR — PERMISO ACTIVO
+// QR — SOLICITUD ACTIVO
 // =====================================================
 let qrInstance = null;
 
 function buildQRText(data) {
-  const { permiso } = data;
+  const { solicitud } = data;
   // Solo folio + datos mínimos para no exceder el límite del QR (~1248 chars)
   return [
-    'PROAGRO - PERMISO ACTIVO',
-    `FOLIO: ${permiso.folio}`,
-    `EMPRESA: ${permiso.empresa.substring(0,40)}`,
-    `INICIO: ${formatFecha(permiso.fecha_inicio)}`,
-    `FIN: ${formatFecha(permiso.fecha_fin)}`,
-    `AUTORIZADO: ${(permiso.aprobado_seg_nombre||'').substring(0,30)}`
+    'PROAGRO - SOLICITUD ACTIVO',
+    `FOLIO: ${solicitud.folio}`,
+    `EMPRESA: ${solicitud.empresa.substring(0,40)}`,
+    `INICIO: ${formatFecha(solicitud.fecha_inicio)}`,
+    `FIN: ${formatFecha(solicitud.fecha_fin)}`,
+    `AUTORIZADO: ${(solicitud.aprobado_seg_nombre||'').substring(0,30)}`
   ].join('\n');
 }
 
 // Texto legible completo para mostrar en pantalla (no va al QR)
 function buildTextoCompleto(data) {
-  const { permiso, personal, vehiculos, equipos } = data;
+  const { solicitud, personal, vehiculos, equipos } = data;
   const lineas = [];
-  lineas.push('===== PERMISO DE ACCESO PROAGRO =====');
-  lineas.push(`FOLIO:        ${permiso.folio}`);
-  lineas.push(`EMPRESA:      ${permiso.empresa}`);
-  lineas.push(`CONTRATO:     ${permiso.contrato}`);
-  lineas.push(`RESPONSABLE:  ${permiso.responsable_contrato}`);
-  lineas.push(`INICIO:       ${formatFecha(permiso.fecha_inicio)}`);
-  lineas.push(`FIN:          ${formatFecha(permiso.fecha_fin)}`);
+  lineas.push('===== SOLICITUD DE ACCESO PROAGRO =====');
+  lineas.push(`FOLIO:        ${solicitud.folio}`);
+  lineas.push(`EMPRESA:      ${solicitud.empresa}`);
+  lineas.push(`CONTRATO:     ${solicitud.contrato}`);
+  lineas.push(`RESPONSABLE:  ${solicitud.responsable_contrato}`);
+  lineas.push(`INICIO:       ${formatFecha(solicitud.fecha_inicio)}`);
+  lineas.push(`FIN:          ${formatFecha(solicitud.fecha_fin)}`);
   lineas.push(`ESTADO:       ACTIVO`);
-  lineas.push(`AUTORIZADO:   ${permiso.aprobado_seg_nombre || '—'}`);
+  lineas.push(`AUTORIZADO:   ${solicitud.aprobado_seg_nombre || '—'}`);
   lineas.push('');
   if (personal && personal.length > 0) {
     lineas.push(`----- PERSONAL (${personal.length}) -----`);
@@ -1143,11 +1159,11 @@ function buildTextoCompleto(data) {
 }
 
 function mostrarQR(data) {
-  const { permiso } = data;
+  const { solicitud } = data;
   const texto = buildQRText(data);
 
   // Mostrar folio en header
-  document.getElementById('qrFolio').textContent = permiso.folio;
+  document.getElementById('qrFolio').textContent = solicitud.folio;
 
   // Mostrar texto completo en el panel (legible), QR usa versión corta
   document.getElementById('qrInfo').textContent = buildTextoCompleto(data);
@@ -1162,8 +1178,8 @@ function mostrarQR(data) {
     text: texto,
     width: 240,
     height: 240,
-    colorDark: '#c8f03a',
-    colorLight: '#15171a',
+    colorDark: '#0f0f0f',
+    colorLight: '#ffffff',
     correctLevel: QRCode.CorrectLevel.L
   });
 
@@ -1173,7 +1189,7 @@ function mostrarQR(data) {
 }
 
 function closeQR(e) {
-  if (e.target === e.currentTarget) closeQRBtn();
+  // Solo cierra con el botón X
 }
 function closeQRBtn() {
   document.getElementById('modalQR').classList.remove('open');
@@ -1185,7 +1201,7 @@ function descargarQR() {
                  document.querySelector('#qrCanvas img');
   if (!canvas) return;
 
-  const folio = document.getElementById('qrFolio').textContent || 'permiso';
+  const folio = document.getElementById('qrFolio').textContent || 'solicitud';
 
   if (canvas.tagName === 'CANVAS') {
     const link = document.createElement('a');
@@ -1200,13 +1216,13 @@ function descargarQR() {
   }
 }
 
-// También permitir ver QR desde el modal de detalle (permiso ya activo)
-async function verQRPermiso(id) {
+// También permitir ver QR desde el modal de detalle (solicitud ya activo)
+async function verQRSolicitud(id) {
   try {
-    const res = await fetch(`/permisos/${id}`);
+    const res = await fetch(`/solicitudes/${id}`);
     const r = await res.json();
     if (r.success) mostrarQR(r.data);
-    else alert('Error al cargar datos del permiso.');
+    else alert('Error al cargar datos de la solicitud.');
   } catch(e) { console.error(e); }
 }
 
@@ -1272,9 +1288,9 @@ async function verificarRostro() {
   if (r.acceso === 'permitido') {
     const icono = r.tipo_movimiento === 'salida' ? '↑' : '↓';
     const mov   = r.tipo_movimiento === 'salida' ? 'SALIDA' : 'ENTRADA';
-    const permInfo = r.permiso
-      ? `<div style="font-size:12px;margin-top:6px;opacity:0.8">Permiso: ${r.permiso.folio} · ${r.permiso.empresa}</div>`
-      : `<div style="font-size:12px;margin-top:6px;color:#f59e0b">⚠️ Sin permiso activo hoy</div>`;
+    const permInfo = r.solicitud
+      ? `<div style="font-size:12px;margin-top:6px;opacity:0.8">Solicitud: ${r.solicitud.folio} · ${r.solicitud.empresa}</div>`
+      : `<div style="font-size:12px;margin-top:6px;color:#f59e0b">⚠️ Sin solicitud activo hoy</div>`;
     resultEl.className = 'facial-result permitido';
     resultEl.innerHTML = `${icono} ${mov} — ${r.empleado.nombre} ${r.empleado.apellido}<br>
       <span style="font-size:13px">${r.empleado.area||''} · ${r.hora||''}</span>
@@ -1296,6 +1312,16 @@ async function abrirFacialEnrolar() {
   document.getElementById('modalEnrolar').classList.add('open');
   document.body.style.overflow = 'hidden';
   facialDescriptorEnrol = null;
+  // Limpiar campos
+  ['enrol-nombre','enrol-apellido','enrol-email','enrol-documento','enrol-empresa','enrol-area','enrol-cargo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('enrol-pendiente-id').textContent = '';
+  // Prellenar empresa si es contratista
+  if (window._userRol === 'contratista' && window._userEmpresa) {
+    document.getElementById('enrol-empresa').value = window._userEmpresa;
+  }
+  // Sin dropdown de empleados pendientes
   const statusEl = document.getElementById('enrol-status');
   const capEl = document.getElementById('enrol-cap-status');
   statusEl.className = 'facial-status'; statusEl.textContent = '⏳ Iniciando cámara...';
@@ -1318,31 +1344,267 @@ async function capturarRostroEnrol() {
   if (descriptor) {
     facialDescriptorEnrol = descriptor;
     capEl.className = 'facial-status ok'; capEl.textContent = `✅ Rostro capturado (${descriptor.length} valores)`;
-    document.getElementById('btn-enrol-guardar').disabled = false;
+    const wf = document.getElementById('warn-foto'); if(wf) wf.style.display='none';
+  verificarBotonGuardar();
   } else {
     capEl.className = 'facial-status error'; capEl.textContent = '❌ No se detectó rostro — intenta de nuevo';
   }
 }
 
-async function guardarEnrolamiento() {
-  const nombre   = document.getElementById('enrol-nombre').value.trim();
-  const apellido = document.getElementById('enrol-apellido').value.trim();
-  const email    = document.getElementById('enrol-email').value.trim();
-  const documento= document.getElementById('enrol-documento').value.trim();
-  const area     = document.getElementById('enrol-area').value.trim();
-  const cargo    = document.getElementById('enrol-cargo').value.trim();
-  const empresa  = document.getElementById('enrol-empresa')?.value.trim() || '';
-  if (!nombre || !apellido) { alert('Nombre y apellido son obligatorios'); return; }
-  if (!empresa) { alert('La empresa es obligatoria'); return; }
-  if (!facialDescriptorEnrol) { alert('Debes capturar el rostro primero'); return; }
+// ── Archivos de enrolamiento ──────────────────────
+let enrolCredFile    = null;
+let enrolImssFile    = null;
+let enrolCredProcesado = false;
+let enrolImssProcesado = false;
+let enrolCredData    = null; // base64
+let enrolImssData    = null; // base64
+
+function enrolArchivoSeleccionado(input, tipo) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { alert('Archivo demasiado grande (máx 10 MB)'); return; }
+  if (tipo === 'cred') {
+    enrolCredFile = file;
+    enrolCredProcesado = false;
+    enrolCredData = null;
+    document.getElementById('enrol-cred-label').textContent = '⏳ ' + file.name;
+  } else {
+    enrolImssFile = file;
+    enrolImssProcesado = false;
+    enrolImssData = null;
+    document.getElementById('enrol-imss-label').textContent = '⏳ ' + file.name;
+  }
+  verificarBotonGuardar();
+  procesarDocEnrol(file, tipo);
+}
+
+function enrolDropFile(event, tipo) {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  const input = document.getElementById(`enrol-${tipo}-input`);
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  enrolArchivoSeleccionado(input, tipo);
+}
+
+function enrolReintentarDoc(tipo) {
+  // Reset y volver a seleccionar
+  if (tipo === 'cred') {
+    enrolCredFile = null; enrolCredProcesado = false; enrolCredData = null;
+    document.getElementById('enrol-cred-proceso').style.display = 'none';
+    document.getElementById('enrol-cred-retry').style.display = 'none';
+    document.getElementById('enrol-cred-label').textContent = 'Arrastra o haz clic para subir credencial';
+    document.getElementById('enrol-cred-drop').style.borderColor = 'var(--border)';
+    document.getElementById('enrol-cred-input').value = '';
+    document.getElementById('enrol-cred-input').click();
+  } else {
+    enrolImssFile = null; enrolImssProcesado = false; enrolImssData = null;
+    document.getElementById('enrol-imss-proceso').style.display = 'none';
+    document.getElementById('enrol-imss-retry').style.display = 'none';
+    document.getElementById('enrol-imss-label').textContent = 'Arrastra o haz clic para subir vigencia IMSS';
+    document.getElementById('enrol-imss-drop').style.borderColor = '#3b82f6';
+    document.getElementById('enrol-imss-input').value = '';
+    document.getElementById('enrol-imss-input').click();
+  }
+  verificarBotonGuardar();
+}
+
+async function procesarDocEnrol(file, tipo) {
+  const procesoEl = document.getElementById(`enrol-${tipo}-proceso`);
+  const retryEl   = document.getElementById(`enrol-${tipo}-retry`);
+  const dropEl    = document.getElementById(`enrol-${tipo}-drop`);
+  const labelEl   = document.getElementById(`enrol-${tipo}-label`);
+  const warnEl    = document.getElementById(`warn-${tipo}`);
+
+  procesoEl.style.display = 'block';
+  procesoEl.style.color   = 'var(--text-2)';
+  procesoEl.innerHTML     = '⏳ Comprimiendo imagen...';
+  retryEl.style.display   = 'none';
+
+  try {
+    const base64 = await fileToBase64(file);
+
+    procesoEl.innerHTML = '⏳ Enviando a procesamiento con IA...';
+
+    // Enviar a n8n según tipo
+    const endpoint = tipo === 'imss' ? '/documentos/procesar-imss' : '/documentos/procesar-doc';
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64, mime: file.type, nombre: file.name })
+    });
+    const data = await resp.json();
+
+    if (!data.success) throw new Error(data.error || 'Error de procesamiento');
+
+    // Éxito
+    if (tipo === 'cred') {
+      enrolCredProcesado = true;
+      enrolCredData = { base64, mime: file.type, nombre: file.name, extracted: data.extracted };
+      const docType = data.extracted?.clave_elector ? 'INE' : data.extracted?.numero_pasaporte ? 'PASAPORTE' : 'Documento';
+      const nombre  = data.extracted?.nombre || '';
+      procesoEl.innerHTML = `✅ ${docType} procesado — ${nombre}`;
+      procesoEl.style.color = 'var(--success)';
+      dropEl.style.borderColor = 'var(--success)';
+      labelEl.textContent = '✅ ' + file.name;
+      if (warnEl) warnEl.style.display = 'none';
+    } else {
+      enrolImssProcesado = true;
+      enrolImssData = { base64, mime: file.type, nombre: file.name, extracted: data.extracted };
+      const vigente = data.extracted?.vigente;
+      const nombre  = data.extracted?.nombre_asegurado || '';
+      const fecha   = data.extracted?.fecha_vigencia || '';
+      procesoEl.innerHTML = vigente
+        ? `✅ VIGENTE — ${nombre} — Hasta: ${fecha}`
+        : `⚠️ NO VIGENTE — ${nombre}`;
+      procesoEl.style.color = vigente ? 'var(--success)' : 'var(--warning)';
+      dropEl.style.borderColor = vigente ? 'var(--success)' : 'var(--warning)';
+      labelEl.textContent = '✅ ' + file.name;
+      if (warnEl) warnEl.style.display = 'none';
+    }
+
+  } catch(e) {
+    procesoEl.innerHTML = `❌ Error: ${e.message}`;
+    procesoEl.style.color = 'var(--danger)';
+    dropEl.style.borderColor = 'var(--danger)';
+    retryEl.style.display = 'block';
+    if (tipo === 'cred') { enrolCredFile = null; enrolCredProcesado = false; }
+    else { enrolImssFile = null; enrolImssProcesado = false; }
+  }
+  verificarBotonGuardar();
+}
+
+function verificarBotonGuardar() {
+  const tieneFoto = facialDescriptorEnrol !== null;
+  const tieneCred = enrolCredProcesado;
+  const tieneImss = enrolImssProcesado;
+
+  const fotoWarn = document.getElementById('warn-foto');
+  const credWarn = document.getElementById('warn-cred');
+  const imssWarn = document.getElementById('warn-imss');
+  if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
+  if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
+  if (imssWarn) imssWarn.style.display = (enrolImssFile || tieneImss) ? 'none' : 'flex';
+
   const btn = document.getElementById('btn-enrol-guardar');
-  btn.disabled = true; btn.textContent = '⏳ Guardando...';
-  const r = await Facial.enrolar({ nombre, apellido, email, documento, area, cargo, empresa, descriptor: facialDescriptorEnrol });
-  if (r.success) { alert(`✅ ${r.empleado.nombre} ${r.empleado.apellido} enrolado exitosamente`); cerrarFacialEnrolar(); }
-  else { alert('❌ Error: ' + (r.error || 'Error desconocido')); btn.disabled = false; btn.textContent = 'GUARDAR'; }
+  btn.disabled = !(tieneFoto && tieneCred && tieneImss);
+  btn.style.opacity = (tieneFoto && tieneCred && tieneImss) ? '1' : '0.5';
+}
+
+async function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function guardarEnrolamiento() {
+  const nombre    = document.getElementById('enrol-nombre').value.trim();
+  const apellido  = document.getElementById('enrol-apellido').value.trim();
+  const email     = document.getElementById('enrol-email').value.trim();
+  const documento = document.getElementById('enrol-documento').value.trim();
+  const area      = document.getElementById('enrol-area').value.trim();
+  const cargo     = document.getElementById('enrol-cargo').value.trim();
+  const empresa   = document.getElementById('enrol-empresa')?.value.trim() || '';
+
+  // Validar campos de texto
+  const warnDatos = document.getElementById('warn-datos');
+  if (!nombre || !apellido) {
+    if (warnDatos) { warnDatos.style.display = 'flex'; warnDatos.textContent = '⚠ Nombre y apellido son obligatorios'; }
+    return;
+  }
+  if (!empresa) {
+    if (warnDatos) { warnDatos.style.display = 'flex'; warnDatos.textContent = '⚠ La empresa es obligatoria'; }
+    return;
+  }
+  if (warnDatos) warnDatos.style.display = 'none';
+
+  // Validar foto, credencial e IMSS
+  verificarBotonGuardar();
+  if (!facialDescriptorEnrol || !enrolCredFile || !enrolImssFile) return;
+
+  const btn = document.getElementById('btn-enrol-guardar');
+  const statusEl = document.getElementById('enrol-save-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Procesando...';
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Convirtiendo documentos...';
+
+  try {
+    statusEl.textContent = 'Registrando empleado...';
+
+    // 1. Crear empleado con estatus no_activo
+    const rEmp = await Facial.enrolar({
+      nombre, apellido, email, documento, area, cargo, empresa,
+      descriptor: facialDescriptorEnrol,
+      estatus: 'no_activo'
+    });
+
+    if (!rEmp.success) throw new Error(rEmp.error || 'Error al registrar empleado');
+
+    const empleadoId = rEmp.empleado.id;
+    statusEl.textContent = 'Subiendo credencial...';
+
+    statusEl.textContent = 'Guardando credencial...';
+
+    // 2. Guardar credencial ya procesada
+    const rCred = await fetch('/documentos/subir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        archivos: [{ nombre: enrolCredData.nombre, mime: enrolCredData.mime, base64: enrolCredData.base64, tipo: 'DOC' }],
+        empleado_id: empleadoId
+      })
+    }).then(r => r.json());
+
+    statusEl.textContent = 'Guardando vigencia IMSS...';
+
+    // 3. Guardar vigencia IMSS ya procesada
+    const rImss = await fetch('/documentos/subir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        archivos: [{ nombre: enrolImssData.nombre, mime: enrolImssData.mime, base64: enrolImssData.base64, tipo: 'IMSS' }],
+        empleado_id: empleadoId
+      })
+    }).then(r => r.json());
+
+    statusEl.textContent = '✅ Personal registrado con estatus NO ACTIVO';
+    statusEl.style.color = 'var(--success)';
+
+    setTimeout(() => { cerrarFacialEnrolar(); }, 1500);
+
+  } catch(e) {
+    statusEl.textContent = '❌ Error: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+    btn.disabled = false;
+    btn.textContent = 'REGISTRAR PERSONAL';
+  }
+}
+
+function cargarEmpleadoPendiente(id) {
+  if (!id) return;
+  const sel = document.getElementById('enrol-pendientes');
+  const opt = sel.querySelector(`option[value="${id}"]`);
+  if (!opt) return;
+  const e = JSON.parse(opt.dataset.emp);
+  const partes = (e.apellido || '').split(' ');
+  document.getElementById('enrol-nombre').value    = e.nombre || '';
+  document.getElementById('enrol-apellido').value  = e.apellido || '';
+  document.getElementById('enrol-documento').value = e.documento_identidad || '';
+  document.getElementById('enrol-empresa').value   = e.empresa || '';
+  document.getElementById('enrol-cargo').value     = e.cargo && e.cargo !== 'Pendiente' ? e.cargo : '';
+  document.getElementById('enrol-pendiente-id').textContent = id;
 }
 
 function cerrarFacialEnrolar() {
+  enrolCredFile = null; enrolImssFile = null;
+  enrolCredProcesado = false; enrolImssProcesado = false;
+  enrolCredData = null; enrolImssData = null;
   Facial.detenerCamara();
   document.getElementById('modalEnrolar').classList.remove('open');
   document.body.style.overflow = '';

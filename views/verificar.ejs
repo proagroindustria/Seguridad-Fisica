@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Asistencia — PROAGRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="/js/facial.js"></script>
+  <style>
+    .cam-container {
+      position: relative;
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      background: #000;
+      border: 2px solid var(--border);
+      overflow: hidden;
+    }
+    .cam-container video,
+    .cam-container canvas {
+      width: 100%;
+      height: 380px;
+      object-fit: cover;
+      display: block;
+    }
+    .cam-container canvas {
+      position: absolute;
+      top: 0; left: 0;
+    }
+    .resultado-card {
+      max-width: 560px;
+      margin: 16px auto 0;
+      padding: 20px 24px;
+      border-radius: 2px;
+      display: none;
+      animation: slideUp 0.3s ease;
+    }
+    .resultado-card.permitido {
+      display: block;
+      background: var(--success-bg);
+      border: 1.5px solid var(--success);
+    }
+    .resultado-card.denegado {
+      display: block;
+      background: var(--danger-bg);
+      border: 1.5px solid var(--danger);
+    }
+    @keyframes slideUp {
+      from { opacity:0; transform: translateY(10px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-mark-sm">P</div>
+        <div><span class="sidebar-brand">PROAGRO</span><span class="sidebar-version">v1.0.0</span></div>
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></div>
+      <div class="user-info">
+        <span class="user-name"><%= user.nombre_completo %></span>
+        <span class="user-role-badge role-seguridad_fisica">SEG. FÍSICA</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <p class="nav-section-label">NAVEGACIÓN</p>
+      <a href="/dashboard" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        <span>Solicitudes</span>
+      </a>
+      <a href="/personal" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Trabajadores Contratistas</span>
+      </a>
+      <a href="/verificar" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M3 20c0-4 4-7 9-7s9 3 9 7"/></svg>
+        <span>Registro de Asistencia</span>
+      </a>
+      <a href="/historial" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        <span>Registro de Incidencias</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/logout" class="nav-item nav-logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Cerrar Sesión</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="main-wrapper">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" onclick="openSidebar()"><span></span><span></span><span></span></button>
+        <div class="topbar-brand">
+          <div class="topbar-logo-mark">P</div>
+          <span class="topbar-title">PROAGRO</span>
+          <span class="topbar-sep">/</span>
+          <span class="topbar-section">Registro de Asistencia</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-user">
+          <div class="topbar-avatar"><%= user.nombre_completo.charAt(0).toUpperCase() %></div>
+          <span class="topbar-username"><%= user.username %></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content" style="align-items:center">
+
+      <div style="max-width:560px;width:100%;margin:0 auto">
+        <p class="section-eyebrow">SEGURIDAD FÍSICA</p>
+        <h1 class="section-title" style="margin-bottom:20px">Registro de Asistencia</h1>
+
+        <!-- Status -->
+        <div id="verif-status" style="padding:10px 16px;border:1px solid var(--border);background:var(--bg-3);font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-2);text-align:center;margin-bottom:12px">
+          ⏳ Iniciando cámara...
+        </div>
+
+        <!-- Cámara -->
+        <div class="cam-container">
+          <video id="verif-video" autoplay muted playsinline></video>
+          <canvas id="verif-canvas"></canvas>
+        </div>
+
+        <!-- Info automático -->
+        <div style="text-align:center;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-3);padding:8px 0">
+          El sistema detecta ENTRADA / SALIDA automáticamente
+        </div>
+
+        <!-- Botón verificar -->
+        <button id="btn-verificar" onclick="verificarRostro()" disabled
+          style="width:100%;padding:14px;background:var(--black);color:var(--accent);border:2px solid var(--accent);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:2px;cursor:pointer;transition:all 0.2s;margin-top:4px">
+          VERIFICAR
+        </button>
+
+        <!-- Resultado -->
+        <div id="verif-result" class="resultado-card">
+          <div id="res-mov" style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;letter-spacing:1px;margin-bottom:8px"></div>
+          <div id="res-nombre" style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:4px"></div>
+          <div id="res-info" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-3)"></div>
+          <div id="res-solicitud" style="margin-top:10px;font-size:12px"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarOverlay').classList.add('open'); }
+    function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
+
+    let facialModelos = null;
+    let facialDescriptorVerif = null;
+
+    async function iniciarVerificacion() {
+      const statusEl = document.getElementById('verif-status');
+      if (!facialModelos) facialModelos = await Facial.cargarModelos();
+      const ok = await Facial.iniciarCamara('verif-video', 'verif-canvas');
+      if (!ok) {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.style.borderColor = 'var(--danger)';
+        statusEl.textContent = '❌ No se pudo acceder a la cámara';
+        return;
+      }
+      Facial.iniciarDeteccion(
+        () => {
+          // El descriptor se guarda en Facial.ultimoDescriptor
+          statusEl.style.color = 'var(--success)';
+          statusEl.style.borderColor = 'var(--success)';
+          statusEl.style.background = 'var(--success-bg)';
+          statusEl.textContent = '✅ Rostro detectado — listo para verificar';
+          const btn = document.getElementById('btn-verificar');
+          btn.disabled = false;
+          btn.style.background = 'var(--accent)';
+          btn.style.color = 'var(--black)';
+        },
+        () => {
+          statusEl.style.color = 'var(--danger)';
+          statusEl.style.borderColor = 'var(--danger)';
+          statusEl.style.background = 'var(--danger-bg)';
+          statusEl.textContent = '❌ Sin rostro detectado';
+          const btn = document.getElementById('btn-verificar');
+          btn.disabled = true;
+          btn.style.background = 'var(--black)';
+          btn.style.color = 'var(--accent)';
+        }
+      );
+    }
+
+    async function verificarRostro() {
+      // Capturar descriptor en este momento
+      const descriptor = Facial.ultimoDescriptor;
+      if (!descriptor) {
+        mostrarNotificacion('❌', 'Sin rostro detectado', '#dc2626');
+        return;
+      }
+      const btn = document.getElementById('btn-verificar');
+      btn.textContent = '⏳ VERIFICANDO...';
+      btn.disabled = true;
+      const r = await Facial.verificar(descriptor);
+      console.log('Resultado:', r);
+      const resultEl  = document.getElementById('verif-result');
+      const movEl     = document.getElementById('res-mov');
+      const nombreEl  = document.getElementById('res-nombre');
+      const infoEl    = document.getElementById('res-info');
+      const solEl     = document.getElementById('res-solicitud');
+
+      if (r.acceso === 'permitido') {
+        const esEntrada = r.tipo_movimiento === 'entrada';
+        const color = esEntrada ? '#16a34a' : '#dc2626';
+        const icono = esEntrada ? '↓' : '↑';
+        const mov   = esEntrada ? 'ENTRADA' : 'SALIDA';
+        console.log('RESULTADO:', r);
+        console.log('Mostrando notificacion:', icono, mov, r.empleado.nombre);
+        mostrarNotificacion(icono + ' ' + mov, r.empleado.nombre + ' ' + r.empleado.apellido, color);
+        console.log('Overlay creado:', document.getElementById('notif-overlay'));
+        resultEl.style.display = 'block';
+        resultEl.style.borderColor = color;
+        resultEl.style.background = esEntrada ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)';
+        movEl.style.color   = color;
+        movEl.textContent   = icono + ' ' + mov;
+        nombreEl.textContent = r.empleado.nombre + ' ' + r.empleado.apellido;
+        infoEl.textContent  = (r.empleado.empresa||'') + (r.empleado.area ? ' · ' + r.empleado.area : '') + (r.hora ? ' · ' + r.hora : '');
+        solEl.innerHTML = r.solicitud
+          ? '<span style="color:#16a34a">✓ Solicitud: ' + r.solicitud.folio + ' — ' + r.solicitud.empresa + '</span>'
+          : '<span style="color:#d97706">⚠️ Sin solicitud activa hoy</span>';
+      } else {
+        mostrarNotificacion('❌', 'Rostro no reconocido', '#dc2626');
+        resultEl.style.display = 'block';
+        resultEl.style.borderColor = '#dc2626';
+        resultEl.style.background = 'rgba(220,38,38,0.08)';
+        movEl.style.color = '#dc2626';
+        movEl.textContent = '❌ ACCESO DENEGADO';
+        nombreEl.textContent = 'Rostro no reconocido';
+        infoEl.textContent = '';
+        solEl.textContent = '';
+      }
+
+      btn.textContent = 'VERIFICAR';
+      btn.disabled = false;
+    }
+
+    function mostrarNotificacion(icono, texto, color) {
+      // Eliminar notificación anterior
+      const prev = document.getElementById('notif-overlay');
+      if (prev) prev.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'notif-overlay';
+      overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.75);
+        animation: fadeIn 0.2s ease;
+        cursor: pointer;
+      `;
+      overlay.innerHTML = `
+        <div style="
+          background: #fff; border: 4px solid ${color};
+          padding: 40px 60px; text-align: center;
+          max-width: 420px; width: 90%;
+          animation: popIn 0.3s cubic-bezier(0.16,1,0.3,1);
+        ">
+          <div style="font-size:72px;line-height:1;margin-bottom:16px;color:${color}">${icono}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;letter-spacing:2px;color:${color};margin-bottom:8px">${icono.includes('↓') ? 'ENTRADA' : icono.includes('↑') ? 'SALIDA' : 'DENEGADO'}</div>
+          <div style="font-size:18px;font-weight:500;color:#111;margin-bottom:6px">${texto}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#888;margin-top:16px">Toca para cerrar</div>
+        </div>
+      `;
+      overlay.onclick = () => overlay.remove();
+      document.body.appendChild(overlay);
+      // Auto-cerrar después de 4 segundos
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 4000);
+    }
+
+    iniciarVerificacion();
+  </script>
+</body>
+</html>
