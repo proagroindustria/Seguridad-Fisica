@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Incidencias — PROAGRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-mark-sm">P</div>
+        <div><span class="sidebar-brand">PROAGRO</span><span class="sidebar-version">v1.0.0</span></div>
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></div>
+      <div class="user-info">
+        <span class="user-name"><%= user.nombre_completo %></span>
+        <span class="user-role-badge role-<%= user.rol %>">SEG. FÍSICA</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <p class="nav-section-label">NAVEGACIÓN</p>
+      <a href="/dashboard" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        <span>Solicitudes</span>
+      </a>
+      <a href="/personal" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Trabajadores Contratistas</span>
+      </a>
+      <a href="/verificar" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M3 20c0-4 4-7 9-7s9 3 9 7"/></svg>
+        <span>Registro de Asistencia</span>
+      </a>
+      <a href="/historial" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+        <span>Registro de Incidencias</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/logout" class="nav-item nav-logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Cerrar Sesión</span>
+      </a>
+    </div>
+  </aside>
+
+  <div class="main-wrapper">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" onclick="openSidebar()"><span></span><span></span><span></span></button>
+        <div class="topbar-brand">
+          <div class="topbar-logo-mark">P</div>
+          <span class="topbar-title">PROAGRO</span>
+          <span class="topbar-sep">/</span>
+          <span class="topbar-section">Historial de Accesos</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button onclick="exportarExcel()" class="btn-excel" style="display:flex;align-items:center;gap:6px;padding:8px 14px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+          EXPORTAR EXCEL
+        </button>
+        <div class="topbar-user">
+          <div class="topbar-avatar"><%= user.nombre_completo.charAt(0).toUpperCase() %></div>
+          <span class="topbar-username"><%= user.username %></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="section-header">
+        <div>
+          <p class="section-eyebrow">SEGURIDAD FÍSICA</p>
+          <h1 class="section-title">Registro de Incidencias</h1>
+        </div>
+        <div class="filter-bar" style="flex-wrap:wrap;gap:10px">
+          <div class="search-box" style="min-width:200px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="searchHistorial" placeholder="Buscar por nombre..." oninput="filtrarHistorial()">
+          </div>
+          <select id="filtroMovimiento" onchange="filtrarHistorial()"
+            style="padding:9px 14px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px">
+            <option value="">Todos</option>
+            <option value="entrada">Entradas</option>
+            <option value="salida">Salidas</option>
+          </select>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-3)" id="totalHistorial"></div>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <div id="histLoading" class="table-loading">
+          <div class="loading-spinner"></div>
+          <span>Cargando historial...</span>
+        </div>
+        <table class="data-table" id="histTable" style="display:none">
+          <thead>
+            <tr>
+              <th>FECHA / HORA</th>
+              <th>MOVIMIENTO</th>
+              <th>RESULTADO</th>
+              <th>EMPLEADO</th>
+              <th>ÁREA</th>
+              <th>EMPRESA</th>
+              <th>SIMILITUD</th>
+            </tr>
+          </thead>
+          <tbody id="histTbody"></tbody>
+        </table>
+        <div id="histEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">Sin registros de acceso.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarOverlay').classList.add('open'); }
+    function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
+
+    let allAccesos = [];
+
+    async function cargarHistorial() {
+      try {
+        const r = await fetch('/facial/accesos');
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        allAccesos = d.data;
+        filtrarHistorial();
+        document.getElementById('histLoading').style.display = 'none';
+        document.getElementById('histTable').style.display = 'table';
+      } catch(e) {
+        document.getElementById('histLoading').innerHTML = '<span style="color:var(--danger)">Error: ' + e.message + '</span>';
+      }
+    }
+
+    function filtrarHistorial() {
+      const busq = document.getElementById('searchHistorial').value.toLowerCase();
+      const mov  = document.getElementById('filtroMovimiento').value;
+
+      const filtrados = allAccesos.filter(a => {
+        const nombre = ((a.nombre||'') + ' ' + (a.apellido||'')).toLowerCase();
+        return (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
+      });
+
+      renderHistorial(filtrados);
+      document.getElementById('totalHistorial').textContent = filtrados.length + ' registro(s)';
+    }
+
+    function renderHistorial(data) {
+      const tbody = document.getElementById('histTbody');
+      const empty = document.getElementById('histEmpty');
+      if (!data.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      tbody.innerHTML = data.map(a => {
+        const fecha = a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+        const nombre = a.nombre ? a.nombre + ' ' + a.apellido : 'Desconocido';
+        const similitud = a.similitud ? (parseFloat(a.similitud)*100).toFixed(1)+'%' : '—';
+        const esEntrada = a.tipo_movimiento === 'entrada';
+        const movColor = esEntrada ? 'var(--success)' : 'var(--danger)';
+        const movLabel = (esEntrada ? '↓ ENTRADA' : '↑ SALIDA');
+        const resClass = a.resultado === 'exitoso' ? 'badge-exitoso' : 'badge-fallido';
+
+        return '<tr style="border-bottom:1px solid var(--border)">' +
+          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + fecha + '</td>' +
+          '<td style="font-weight:700;color:' + movColor + ';font-family:Barlow Condensed,sans-serif;font-size:13px">' + movLabel + '</td>' +
+          '<td class="' + resClass + '">' + (a.resultado === 'exitoso' ? '✅' : '❌') + ' ' + a.resultado + '</td>' +
+          '<td style="font-weight:500;color:var(--text)">' + nombre + '</td>' +
+          '<td style="color:var(--text-2)">' + (a.area||'—') + '</td>' +
+          '<td style="color:var(--text-2)">' + (a.empresa||'—') + '</td>' +
+          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + similitud + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function exportarExcel() {
+      if (!allAccesos.length) { alert('No hay datos para exportar'); return; }
+      const ws = XLSX.utils.json_to_sheet(allAccesos.map(a => ({
+        'Fecha/Hora': a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX') : '',
+        'Movimiento': a.tipo_movimiento,
+        'Resultado':  a.resultado,
+        'Empleado':   (a.nombre||'') + ' ' + (a.apellido||''),
+        'Área':       a.area || '',
+        'Empresa':    a.empresa || '',
+        'Similitud':  a.similitud ? (parseFloat(a.similitud)*100).toFixed(1)+'%' : '',
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Accesos');
+      XLSX.writeFile(wb, 'PROAGRO_Accesos_' + new Date().toLocaleDateString('es-MX').replace(/\//g,'-') + '.xlsx');
+    }
+
+    cargarHistorial();
+  </script>
+</body>
+</html>

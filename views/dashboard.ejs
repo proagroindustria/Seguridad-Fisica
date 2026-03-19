@@ -47,7 +47,7 @@
 
     <nav class="sidebar-nav">
       <p class="nav-section-label">NAVEGACIÓN</p>
-      <a href="#" class="nav-item active" onclick="showSection('permisos')">
+      <a href="#" class="nav-item active" onclick="showSection('solicitudes')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14,2 14,8 20,8"/>
@@ -55,18 +55,55 @@
           <line x1="16" y1="17" x2="8" y2="17"/>
           <polyline points="10,9 9,9 8,9"/>
         </svg>
-        <span>Permisos</span>
+        <span>Solicitudes</span>
       </a>
       <% if (user.rol === 'contratista') { %>
-      <a href="#" class="nav-item" onclick="openModalPermiso(); closeSidebar();">
+
+
+      <a href="/personal" class="nav-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="16"/>
-          <line x1="8" y1="12" x2="16" y2="12"/>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
-        <span>Nuevo Permiso</span>
+        <span>Mi Personal</span>
+      </a>
+      <a href="#" class="nav-item" onclick="abrirFacialEnrolar(); closeSidebar();">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <line x1="19" y1="8" x2="19" y2="14"/>
+          <line x1="22" y1="11" x2="16" y2="11"/>
+        </svg>
+        <span>Gestión de Trabajadores</span>
       </a>
       <% } %>
+      <% if (user.rol === 'seguridad_fisica') { %>
+      <a href="/personal" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>Trabajadores Contratistas</span>
+      </a>
+      <a href="/verificar" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M3 20c0-4 4-7 9-7s9 3 9 7"/>
+        </svg>
+        <span>Registro de Asistencia</span>
+      </a>
+      <a href="/historial" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>
+        </svg>
+        <span>Registro de Incidencias</span>
+      </a>
+      <% } %>
+
     </nav>
 
     <div class="sidebar-footer">
@@ -94,7 +131,7 @@
           <span class="topbar-logo-mark">P</span>
           <span class="topbar-title">PROAGRO</span>
           <span class="topbar-sep">/</span>
-          <span class="topbar-section">Sistema de Permisos</span>
+          <span class="topbar-section">Sistema de Solicitudes</span>
         </div>
       </div>
       <div class="topbar-right">
@@ -114,7 +151,7 @@
       <div class="section-header">
         <div class="section-title-group">
           <p class="section-eyebrow">GESTIÓN</p>
-          <h1 class="section-title">Permisos de Acceso</h1>
+          <h1 class="section-title">Solicitudes de Acceso</h1>
         </div>
 
         <div class="section-actions">
@@ -134,34 +171,19 @@
           </div>
 
           <% if (user.rol === 'contratista') { %>
-          <button class="btn-primary" onclick="openModalPermiso()">
+          <button class="btn-primary" onclick="openModalSolicitud()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            NUEVO PERMISO
+            NUEVA SOLICITUD
           </button>
           <% } %>
         </div>
       </div>
 
       <!-- BOTONES RECONOCIMIENTO FACIAL -->
-      <% if (user.rol === 'seguridad_fisica') { %>
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-        <button class="btn-facial" onclick="abrirFacialVerificar()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="8" r="4"/><path d="M3 20c0-4 4-7 9-7s9 3 9 7"/></svg>
-          VERIFICAR ROSTRO
-        </button>
-        <button class="btn-facial" onclick="abrirFacialEnrolar()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-          ENROLAR PERSONA
-        </button>
-        <button class="btn-facial" onclick="abrirFacialHistorial()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-          HISTORIAL ACCESOS
-        </button>
-      </div>
-      <% } %>
+
 
       <!-- FILTERS -->
       <div class="filter-bar">
@@ -186,7 +208,7 @@
       <div class="table-container">
         <div class="table-loading" id="tableLoading">
           <div class="loading-spinner"></div>
-          <span>Cargando permisos...</span>
+          <span>Cargando solicitudes...</span>
         </div>
 
         <table class="data-table" id="dataTable">
@@ -215,9 +237,9 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
             <polyline points="14,2 14,8 20,8"/>
           </svg>
-          <p>No se encontraron permisos</p>
+          <p>No se encontraron solicitudes</p>
           <% if (user.rol === 'contratista') { %>
-          <button class="btn-primary" onclick="openModalPermiso()">Crear primer permiso</button>
+          <button class="btn-primary" onclick="openModalSolicitud()">Crear primer solicitud</button>
           <% } %>
         </div>
       </div>
@@ -225,16 +247,16 @@
     </main>
   </div>
 
-  <!-- MODAL NUEVO PERMISO -->
+  <!-- MODAL NUEVA SOLICITUD -->
   <% if (user.rol === 'contratista') { %>
-  <div class="modal-overlay" id="modalPermiso" onclick="closeModalOutside(event)">
+  <div class="modal-overlay" id="modalSolicitud">
     <div class="modal-box modal-box-xl">
 
       <!-- HEADER -->
       <div class="modal-header">
         <div>
           <p class="modal-eyebrow">CONTRATISTA</p>
-          <h2 class="modal-title">Nuevo Permiso de Acceso</h2>
+          <h2 class="modal-title">Nueva Solicitud de Acceso</h2>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
           <button class="modal-close" onclick="closeModal()">
@@ -247,7 +269,7 @@
 
       <div class="modal-alert" id="modalAlert" style="display:none;"></div>
 
-      <form id="formPermiso" class="modal-form">
+      <form id="formSolicitud" class="modal-form">
 
         <!-- PASO 1: DATOS GENERALES -->
         <div class="form-section">
@@ -313,7 +335,7 @@
 
         <!-- PASO 3: DRAG & DROP DE SECCIONES -->
         <div class="form-section">
-          <p class="form-section-label">— SECCIONES DEL PERMISO <span class="hint-label">(arrastra para agregar)</span></p>
+          <p class="form-section-label">— SECCIONES DE LA SOLICITUD <span class="hint-label">(arrastra para agregar)</span></p>
 
           <!-- PALETA DE TARJETAS DISPONIBLES -->
           <div class="dnd-palette" id="dndPalette">
@@ -384,7 +406,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20,6 9,17 4,12"/>
             </svg>
-            CREAR PERMISO
+            CREAR SOLICITUD
           </button>
         </div>
       </form>
@@ -421,12 +443,12 @@
   <% } %>
 
 
-  <!-- MODAL DETALLE PERMISO -->
-  <div class="modal-overlay" id="modalDetalle" onclick="closeDetalle(event)">
+  <!-- MODAL DETALLE SOLICITUD -->
+  <div class="modal-overlay" id="modalDetalle">
     <div class="modal-box modal-box-xl" id="modalDetalleBox">
       <div class="modal-header">
         <div>
-          <p class="modal-eyebrow" id="detalleEyebrow">PERMISO</p>
+          <p class="modal-eyebrow" id="detalleEyebrow">SOLICITUD</p>
           <h2 class="modal-title" id="detalleFolio">Cargando...</h2>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
@@ -453,7 +475,7 @@
     <div class="submodal-box" style="max-width:440px;">
       <div class="submodal-header">
         <div>
-          <p class="modal-eyebrow" style="color:#ef4444;">RECHAZAR PERMISO</p>
+          <p class="modal-eyebrow" style="color:#ef4444;">RECHAZAR SOLICITUD</p>
           <h3 class="submodal-title">Motivo de Rechazo</h3>
         </div>
         <button class="modal-close" onclick="closeMotivo()">
@@ -483,14 +505,26 @@
     const USER_ROL = '<%= user.rol %>';
     const USER_ID = '<%= user.id %>';
   </script>
+  <script>
+    window._userRol = '<%= user.rol %>';
+    window._userEmpresa = '<%= user.nombre_completo %>';
+    // Abrir modal de enrolamiento si viene con ?accion=enrolar
+    window.addEventListener('load', () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('accion') === 'enrolar') {
+        setTimeout(() => abrirFacialEnrolar(), 500);
+      }
+    });
+  </script>
   <script src="/js/dashboard.js"></script>
+  <script src="/js/documentos.js"></script>
 
   <!-- MODAL QR -->
-  <div class="modal-overlay" id="modalQR" onclick="closeQR(event)">
+  <div class="modal-overlay" id="modalQR">
     <div class="modal-box" style="max-width:480px;text-align:center" id="modalQRBox">
       <div class="modal-header">
         <div>
-          <p class="modal-eyebrow" style="color:var(--accent)">PERMISO ACTIVO</p>
+          <p class="modal-eyebrow" style="color:var(--accent)">SOLICITUD ACTIVO</p>
           <h2 class="modal-title" id="qrFolio">—</h2>
         </div>
         <button class="modal-close" onclick="closeQRBtn()">
@@ -499,7 +533,7 @@
       </div>
       <div style="padding:24px 28px">
         <div id="qrCanvas" style="display:flex;justify-content:center;margin-bottom:20px"></div>
-        <div id="qrInfo" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2);text-align:left;background:var(--dark-4);border:1px solid var(--border);padding:14px;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.7"></div>
+        <div id="qrInfo" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2);text-align:left;background:var(--bg-3);border:1px solid var(--border);padding:14px;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.7"></div>
         <div style="margin-top:16px;display:flex;gap:10px;justify-content:center">
           <button class="btn-secondary" onclick="closeQRBtn()">Cerrar</button>
           <button class="btn-aprobar" onclick="descargarQR()">
@@ -516,7 +550,7 @@
   <div class="modal-facial" id="modalVerificar">
     <div class="facial-box">
       <div class="facial-header">
-        <h3>👁 Verificar Identidad</h3>
+        <h3>👁 Registro de Asistencia</h3>
         <button class="modal-close" onclick="cerrarFacialVerificar()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:18px;height:18px"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -543,32 +577,99 @@
 
   <!-- MODAL: ENROLAR PERSONA -->
   <div class="modal-facial" id="modalEnrolar">
-    <div class="facial-box">
+    <div class="facial-box" style="width:580px;max-height:95vh;overflow-y:auto">
       <div class="facial-header">
-        <h3>➕ Enrolar Persona</h3>
+        <h3>➕ Registrar Personal</h3>
         <button class="modal-close" onclick="cerrarFacialEnrolar()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:18px;height:18px"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
       <div class="facial-body">
+
+        <!-- PASO 1: CÁMARA -->
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">PASO 1 — CAPTURA DE ROSTRO</div>
         <div id="enrol-status" class="facial-status">⏳ Iniciando cámara...</div>
         <div class="facial-cam-wrap">
           <video id="enrol-video" autoplay muted playsinline></video>
           <canvas id="enrol-canvas"></canvas>
         </div>
+        <div id="enrol-cap-status" class="facial-status error">❌ Rostro no capturado</div>
+        <div style="display:flex;justify-content:center;margin-bottom:8px">
+          <button class="btn-facial" id="btn-enrol-capturar" onclick="capturarRostroEnrol()" disabled>CAPTURAR ROSTRO</button>
+        </div>
+        <div id="warn-foto" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400e">
+          ⚠ Debes capturar el rostro antes de continuar
+        </div>
+
+        <!-- PASO 2: DATOS -->
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 2 — DATOS DEL TRABAJADOR</div>
         <div class="facial-form-grid">
           <div class="facial-field"><label>Nombre *</label><input type="text" id="enrol-nombre" placeholder="Nombre"></div>
           <div class="facial-field"><label>Apellido *</label><input type="text" id="enrol-apellido" placeholder="Apellido"></div>
           <div class="facial-field"><label>Email</label><input type="email" id="enrol-email" placeholder="correo@empresa.com"></div>
-          <div class="facial-field"><label>Documento</label><input type="text" id="enrol-documento" placeholder="CURP / ID"></div>
+          <div class="facial-field"><label>CURP</label><input type="text" id="enrol-documento" placeholder="CURP / ID"></div>
           <div class="facial-field" style="grid-column:1/-1"><label>Empresa *</label><input type="text" id="enrol-empresa" placeholder="Nombre de la empresa contratista"></div>
           <div class="facial-field"><label>Área</label><input type="text" id="enrol-area" placeholder="Área"></div>
           <div class="facial-field"><label>Cargo</label><input type="text" id="enrol-cargo" placeholder="Cargo"></div>
         </div>
-        <div id="enrol-cap-status" class="facial-status">❌ Rostro no capturado</div>
+
+        <!-- PASO 3: DOCUMENTOS -->
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 3 — DOCUMENTOS OBLIGATORIOS</div>
+
+        <!-- Credencial -->
+        <div style="margin-bottom:4px">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">
+            CREDENCIAL (INE / PASAPORTE) <span style="color:var(--danger)">*</span>
+          </div>
+          <div id="enrol-cred-drop" onclick="if(!enrolCredProcesado)document.getElementById('enrol-cred-input').click()"
+            style="border:2px dashed var(--border);padding:16px;text-align:center;cursor:pointer;transition:all 0.2s"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="enrolDropFile(event,'cred')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;margin:0 auto 4px;display:block;color:var(--text-3)">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span id="enrol-cred-label" style="font-size:12px;color:var(--text-3)">Arrastra o haz clic para subir credencial</span>
+            <input type="file" id="enrol-cred-input" accept=".jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="enrolArchivoSeleccionado(this,'cred')">
+          </div>
+          <div id="enrol-cred-proceso" style="display:none;margin-top:6px;padding:10px 14px;border:1px solid var(--border);font-family:'Share Tech Mono',monospace;font-size:12px"></div>
+          <button id="enrol-cred-retry" onclick="enrolReintentarDoc('cred')" style="display:none;margin-top:6px;padding:6px 14px;background:transparent;border:1px solid var(--warning);color:var(--warning);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer">↺ REINTENTAR CREDENCIAL</button>
+        </div>
+        <div id="warn-cred" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#92400e">
+          ⚠ La credencial es obligatoria
+        </div>
+
+        <!-- Vigencia IMSS -->
+        <div style="margin-bottom:4px">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">
+            VIGENCIA IMSS <span style="color:var(--danger)">*</span>
+          </div>
+          <div id="enrol-imss-drop" onclick="if(!enrolImssProcesado)document.getElementById('enrol-imss-input').click()"
+            style="border:2px dashed #3b82f6;padding:16px;text-align:center;cursor:pointer;transition:all 0.2s"
+            ondragover="event.preventDefault();this.style.borderColor='#60a5fa'"
+            ondragleave="this.style.borderColor='#3b82f6'"
+            ondrop="enrolDropFile(event,'imss')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" style="width:24px;height:24px;margin:0 auto 4px;display:block">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span id="enrol-imss-label" style="font-size:12px;color:#3b82f6">Arrastra o haz clic para subir vigencia IMSS</span>
+            <input type="file" id="enrol-imss-input" accept=".jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="enrolArchivoSeleccionado(this,'imss')">
+          </div>
+          <div id="enrol-imss-proceso" style="display:none;margin-top:6px;padding:10px 14px;border:1px solid var(--border);font-family:'Share Tech Mono',monospace;font-size:12px"></div>
+          <button id="enrol-imss-retry" onclick="enrolReintentarDoc('imss')" style="display:none;margin-top:6px;padding:6px 14px;background:transparent;border:1px solid var(--warning);color:var(--warning);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer">↺ REINTENTAR VIGENCIA IMSS</button>
+        </div>
+        <div id="warn-imss" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#92400e">
+          ⚠ La vigencia IMSS es obligatoria
+        </div>
+
+        <!-- Estado de guardado -->
+        <div id="enrol-save-status" style="display:none;margin-bottom:12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);text-align:center"></div>
+
         <div style="display:flex;gap:10px;justify-content:center">
-          <button class="btn-facial" id="btn-enrol-capturar" onclick="capturarRostroEnrol()" disabled>CAPTURAR ROSTRO</button>
-          <button class="btn-aprobar" id="btn-enrol-guardar" onclick="guardarEnrolamiento()" disabled>GUARDAR</button>
+          <div id="enrol-pendiente-id" style="display:none"></div>
+          <button class="btn-aprobar" id="btn-enrol-guardar" onclick="guardarEnrolamiento()" disabled>REGISTRAR PERSONAL</button>
           <button class="btn-secondary" onclick="cerrarFacialEnrolar()">Cancelar</button>
         </div>
       </div>
@@ -579,7 +680,7 @@
   <div class="modal-facial" id="modalHistorial">
     <div class="facial-box" style="width:680px">
       <div class="facial-header">
-        <h3>📋 Historial de Accesos Faciales</h3>
+        <h3>📋 Registro de Incidencias</h3>
         <button class="modal-close" onclick="cerrarFacialHistorial()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:18px;height:18px"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -596,6 +697,175 @@
           <button class="btn-facial" onclick="exportarAccesosExcel()">EXPORTAR EXCEL</button>
           <button class="btn-secondary" onclick="cerrarFacialHistorial()">Cerrar</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL: MIS DOCUMENTOS (Contratista)
+  ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalMisDocumentos">
+    <div class="modal-box modal-box-xl" style="max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">CONTRATISTA</p>
+          <h2 class="modal-title">Documentos</h2>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('modalMisDocumentos').classList.remove('open');document.body.style.overflow=''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Pestañas -->
+      <div style="display:flex;border-bottom:1px solid var(--border);padding:0 28px">
+        <button id="tab-docs" onclick="docCambiarTab('docs')"
+          style="padding:12px 20px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1px;cursor:pointer">
+          MIS DOCUMENTOS
+        </button>
+        <button id="tab-imss" onclick="docCambiarTab('imss')"
+          style="padding:12px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-3);font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1px;cursor:pointer">
+          VIGENCIA IMSS
+        </button>
+      </div>
+
+      <!-- PANEL: MIS DOCUMENTOS -->
+      <div id="panel-docs" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:16px 28px">
+          <div id="docDropZone" ondragover="docDragOver(event)" ondragleave="docDragLeave(event)" ondrop="docDrop(event)"
+            style="border:2px dashed var(--border);padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s"
+            onclick="document.getElementById('docFileInput').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;margin:0 auto 8px;display:block;color:var(--text-3)">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--text-2);letter-spacing:1px">
+              ARRASTRA DOCUMENTOS AQUÍ O <span style="color:var(--accent)">HAZ CLIC</span>
+            </p>
+            <p style="font-size:11px;color:var(--text-3);margin-top:4px">INE, Acta, Pasaporte, CURP — JPG, PNG, PDF — máx. 10 MB</p>
+            <input type="file" id="docFileInput" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="docFilesSeleccionados(this.files)">
+          </div>
+          <div id="docColaUpload" style="display:none;margin-top:12px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--text-3);margin-bottom:6px">ARCHIVOS SELECCIONADOS</div>
+            <div id="docColaItems"></div>
+            <button onclick="subirDocumentos()" style="margin-top:8px;padding:9px 22px;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
+              ↑ SUBIR
+            </button>
+          </div>
+          <div id="docProgreso" style="display:none;margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent)"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 28px 28px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--text-3);margin-bottom:10px">DOCUMENTOS SUBIDOS</div>
+          <div id="docListaContratista"><div style="text-align:center;padding:30px;color:var(--text-3);font-size:13px">Cargando...</div></div>
+        </div>
+      </div>
+
+      <!-- PANEL: VIGENCIA IMSS -->
+      <div id="panel-imss" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div style="padding:16px 28px">
+          <div id="imssDropZone" ondragover="imssDragOver(event)" ondragleave="imssDragLeave(event)" ondrop="imssDrop(event)"
+            style="border:2px dashed #3b82f6;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s"
+            onclick="document.getElementById('docImssInput').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" style="width:32px;height:32px;margin:0 auto 8px;display:block">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:#3b82f6;letter-spacing:1px">
+              ARRASTRA DOCUMENTO DE VIGENCIA IMSS O <span style="text-decoration:underline">HAZ CLIC</span>
+            </p>
+            <p style="font-size:11px;color:var(--text-3);margin-top:4px">JPG, PNG, PDF — máx. 10 MB por archivo</p>
+            <input type="file" id="docImssInput" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="docImssSeleccionado(this.files)">
+          </div>
+          <div id="imssColaUpload" style="display:none;margin-top:12px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--text-3);margin-bottom:6px">ARCHIVOS SELECCIONADOS</div>
+            <div id="imssColaItems"></div>
+            <button onclick="subirIMSS()" style="margin-top:8px;padding:9px 22px;background:#3b82f6;color:#fff;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
+              ↑ SUBIR VIGENCIA IMSS
+            </button>
+          </div>
+          <div id="imssProgreso" style="display:none;margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:12px;color:#3b82f6"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 28px 28px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--text-3);margin-bottom:10px">VIGENCIAS SUBIDAS</div>
+          <div id="imssListaContratista"><div style="text-align:center;padding:30px;color:var(--text-3);font-size:13px">Cargando...</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL: DOCUMENTOS POR EMPRESA (Seguridad Física)
+  ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalDocumentosEmpresa">
+    <div class="modal-box modal-box-xl" style="max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">SEGURIDAD FÍSICA</p>
+          <h2 class="modal-title" id="docEmpresaTitulo">Documentos por Empresa</h2>
+        </div>
+        <button class="modal-close" onclick="cerrarDocumentosEmpresaBtn()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:0 28px 28px">
+        <div id="docEmpresaBody">
+          <div style="text-align:center;padding:40px;color:var(--text-3)">Cargando empresas...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL: DETALLE DOCUMENTO
+  ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalDetalleDoc">
+    <div class="modal-box" style="max-width:700px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">DOCUMENTO</p>
+          <h2 class="modal-title" id="detalleDocTitulo">Detalle</h2>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('modalDetalleDoc').classList.remove('open');document.body.style.overflow=''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 28px 28px" id="detalleDocBody">Cargando...</div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: MI PERSONAL (Contratista) ═══ -->
+  <div class="modal-overlay" id="modalMiPersonal">
+    <div class="modal-box modal-box-xl" style="max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">CONTRATISTA</p>
+          <h2 class="modal-title">Mi Personal</h2>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('modalMiPersonal').classList.remove('open');document.body.style.overflow=''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 28px 28px" id="miPersonalBody">
+        <div style="text-align:center;padding:40px;color:var(--text-3)">Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: TODO PERSONAL (Seguridad Física) ═══ -->
+  <div class="modal-overlay" id="modalTodoPersonal">
+    <div class="modal-box modal-box-xl" style="max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">SEGURIDAD FÍSICA</p>
+          <h2 class="modal-title">Trabajadores Contratistas</h2>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('modalTodoPersonal').classList.remove('open');document.body.style.overflow=''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 28px 28px" id="todoPersonalBody">
+        <div style="text-align:center;padding:40px;color:var(--text-3)">Cargando...</div>
       </div>
     </div>
   </div>

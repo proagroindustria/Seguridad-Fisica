@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal — PROAGRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-mark-sm">P</div>
+        <div>
+          <span class="sidebar-brand">PROAGRO</span>
+          <span class="sidebar-version">v1.0.0</span>
+        </div>
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></div>
+      <div class="user-info">
+        <span class="user-name"><%= user.nombre_completo %></span>
+        <span class="user-role-badge role-<%= user.rol %>">
+          <%= user.rol === 'area' ? 'ÁREA' : user.rol === 'seguridad_fisica' ? 'SEG. FÍSICA' : 'CONTRATISTA' %>
+        </span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <p class="nav-section-label">NAVEGACIÓN</p>
+      <a href="/dashboard" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+        </svg>
+        <span>Solicitudes</span>
+      </a>
+      <% if (user.rol === 'contratista') { %>
+      <a href="/personal" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>Mi Personal</span>
+      </a>
+      <a href="/dashboard?accion=enrolar" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <line x1="19" y1="8" x2="19" y2="14"/>
+          <line x1="22" y1="11" x2="16" y2="11"/>
+        </svg>
+        <span>Gestión de Trabajadores</span>
+      </a>
+      <% } %>
+      <% if (user.rol === 'seguridad_fisica') { %>
+      <a href="/personal" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>Trabajadores Contratistas</span>
+      </a>
+      <a href="/verificar" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M3 20c0-4 4-7 9-7s9 3 9 7"/>
+        </svg>
+        <span>Registro de Asistencia</span>
+      </a>
+      <a href="/historial" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>
+        </svg>
+        <span>Registro de Incidencias</span>
+      </a>
+      <% } %>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/logout" class="nav-item nav-logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16,17 21,12 16,7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        <span>Cerrar Sesión</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-wrapper">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" onclick="openSidebar()">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar-brand">
+          <div class="topbar-logo-mark">P</div>
+          <span class="topbar-title">PROAGRO</span>
+          <span class="topbar-sep">/</span>
+          <span class="topbar-section"><%= user.rol === 'contratista' ? 'Mi Personal' : 'Trabajadores Contratistas' %></span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-user">
+          <div class="topbar-avatar"><%= user.nombre_completo.charAt(0).toUpperCase() %></div>
+          <span class="topbar-username"><%= user.username %></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- HEADER -->
+      <div class="section-header">
+        <div>
+          <p class="section-eyebrow"><%= user.rol === 'contratista' ? user.nombre_completo.toUpperCase() : 'SEGURIDAD FÍSICA' %></p>
+          <h1 class="section-title"><%= user.rol === 'contratista' ? 'Mi Personal' : 'Trabajadores Contratistas' %></h1>
+        </div>
+        <div id="statsBar" style="display:flex;gap:10px"></div>
+      </div>
+
+      <!-- TOOLBAR -->
+      <div class="filter-bar">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="searchPersonal" placeholder="Buscar por nombre, CURP, cargo..." oninput="filtrarPersonal()">
+        </div>
+        <% if (user.rol === 'seguridad_fisica') { %>
+        <select id="filtroEmpresa" onchange="filtrarPersonal()"
+          style="padding:9px 14px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px">
+          <option value="">Todas las empresas</option>
+        </select>
+        <% } %>
+        <select id="filtroEstatus" onchange="filtrarPersonal()"
+          style="padding:9px 14px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px">
+          <option value="">Todos los estatus</option>
+          <option value="no_activo">No Activo</option>
+          <option value="activo">Activo</option>
+          <option value="vetado">Vetado</option>
+        </select>
+        <div style="margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-3)" id="totalPersonal"></div>
+      </div>
+
+      <!-- TABLA -->
+      <div class="table-container">
+        <div id="personalLoading" class="table-loading">
+          <div class="loading-spinner"></div>
+          <span>Cargando personal...</span>
+        </div>
+        <table class="data-table" id="personalTable" style="display:none">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>TRABAJADOR</th>
+              <% if (user.rol === 'seguridad_fisica') { %><th>EMPRESA</th><% } %>
+              <th>CARGO / ÁREA</th>
+              <th>CURP</th>
+              <th>IMSS</th>
+              <th>ESTATUS</th>
+              <th>DOCS</th>
+              <th>REGISTRO</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="personalTbody"></tbody>
+        </table>
+        <div id="personalEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">No se encontraron trabajadores.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DETALLE -->
+  <div class="modal-overlay" id="modalTrabajador">
+    <div class="modal-box" style="max-width:720px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div>
+          <p class="modal-eyebrow">TRABAJADOR</p>
+          <h2 class="modal-title" id="trabNombre">—</h2>
+        </div>
+        <button class="modal-close" onclick="cerrarModalTrabajador()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 28px 28px" id="trabBody">Cargando...</div>
+    </div>
+  </div>
+
+  <script>
+    const ROL = '<%= user.rol %>';
+    let allPersonal = [];
+    let currentEmpleadoId = null;
+
+    function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarOverlay').classList.add('open'); }
+    function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
+
+    async function cargarPersonal() {
+      try {
+        const url = ROL === 'contratista' ? '/facial/mi-personal' : '/facial/todo-personal';
+        const r = await fetch(url);
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        allPersonal = d.data;
+
+        if (ROL === 'seguridad_fisica') {
+          const empresas = [...new Set(d.data.map(e => e.empresa).filter(Boolean))].sort();
+          const sel = document.getElementById('filtroEmpresa');
+          empresas.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp; opt.textContent = emp;
+            sel.appendChild(opt);
+          });
+        }
+
+        // Stats
+        const total    = d.data.length;
+        const activos  = d.data.filter(e => e.estatus === 'activo').length;
+        const noActivo = d.data.filter(e => e.estatus === 'no_activo').length;
+        const vetados  = d.data.filter(e => e.estatus === 'vetado').length;
+        document.getElementById('statsBar').innerHTML = `
+          <div class="stat-chip"><span class="stat-num">${total}</span><span class="stat-label">TOTAL</span></div>
+          <div class="stat-chip stat-aprobado"><span class="stat-num">${activos}</span><span class="stat-label">ACTIVOS</span></div>
+          <div class="stat-chip stat-pendiente"><span class="stat-num">${noActivo}</span><span class="stat-label">PENDIENTES</span></div>
+          ${vetados > 0 ? `<div class="stat-chip"><span class="stat-num" style="color:var(--danger)">${vetados}</span><span class="stat-label">VETADOS</span></div>` : ''}
+        `;
+
+        filtrarPersonal();
+        document.getElementById('personalLoading').style.display = 'none';
+        document.getElementById('personalTable').style.display = 'table';
+      } catch(e) {
+        document.getElementById('personalLoading').innerHTML = '<span style="color:var(--danger)">Error: ' + e.message + '</span>';
+      }
+    }
+
+    function filtrarPersonal() {
+      const busq    = document.getElementById('searchPersonal').value.toLowerCase();
+      const empresa = ROL === 'seguridad_fisica' ? document.getElementById('filtroEmpresa').value : '';
+      const estatus = document.getElementById('filtroEstatus').value;
+
+      const filtrados = allPersonal.filter(e => {
+        const nombre = (e.nombre + ' ' + e.apellido).toLowerCase();
+        const matchBusq    = !busq || nombre.includes(busq) || (e.documento_identidad||'').toLowerCase().includes(busq) || (e.cargo||'').toLowerCase().includes(busq);
+        const matchEmpresa = !empresa || e.empresa === empresa;
+        const matchEstatus = !estatus || e.estatus === estatus;
+        return matchBusq && matchEmpresa && matchEstatus;
+      });
+
+      renderTabla(filtrados);
+      document.getElementById('totalPersonal').textContent = filtrados.length + ' trabajador(es)';
+    }
+
+    function renderTabla(data) {
+      const tbody = document.getElementById('personalTbody');
+      const empty = document.getElementById('personalEmpty');
+      if (!data.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      tbody.innerHTML = data.map((e, i) => {
+        const iniciales = (e.nombre.charAt(0) + e.apellido.charAt(0)).toUpperCase();
+        const imss = e.imss_vigente === true
+          ? '<span style="color:var(--success);font-size:11px">✓ VIGENTE</span>'
+          : e.imss_vigente === false
+          ? '<span style="color:var(--danger);font-size:11px">✗ NO VIGENTE</span>'
+          : '<span style="color:var(--text-3);font-size:11px">—</span>';
+        const estatusBadge = e.estatus === 'activo'
+          ? '<span class="status-badge status-aprobado">ACTIVO</span>'
+          : e.estatus === 'vetado'
+          ? '<span class="status-badge status-rechazado">VETADO</span>'
+          : '<span class="status-badge status-vencido">NO ACTIVO</span>';
+        const fecha = e.creado_en ? new Date(e.creado_en).toLocaleDateString('es-MX') : '—';
+
+        return '<tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="verTrabajador(' + e.id + ')" onmouseover="this.style.background=\'var(--bg-3)\'" onmouseout="this.style.background=\'\'">' +
+          '<td class="td-folio">' + (i+1) + '</td>' +
+          '<td><div style="display:flex;align-items:center;gap:10px">' +
+            '<div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + iniciales + '</div>' +
+            '<div><div style="font-weight:500;color:var(--text)">' + e.nombre + ' ' + e.apellido + '</div><div style="font-size:11px;color:var(--text-3)">' + (e.empresa||'') + '</div></div>' +
+          '</div></td>' +
+          (ROL === 'seguridad_fisica' ? '<td class="td-empresa">' + (e.empresa||'—') + '</td>' : '') +
+          '<td style="color:var(--text-2)">' + (e.cargo||'—') + (e.area ? ' / '+e.area : '') + '</td>' +
+          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + (e.documento_identidad||'—') + '</td>' +
+          '<td>' + imss + '</td>' +
+          '<td>' + estatusBadge + '</td>' +
+          '<td style="font-family:Share Tech Mono,monospace;color:var(--text-3)">' + (e.total_docs||0) + '</td>' +
+          '<td style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + fecha + '</td>' +
+          '<td><button onclick="event.stopPropagation();verTrabajador(' + e.id + ')" style="padding:5px 12px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-size:11px;letter-spacing:1px;cursor:pointer">VER</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    async function verTrabajador(id) {
+      currentEmpleadoId = id;
+      document.getElementById('modalTrabajador').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      const emp = allPersonal.find(e => e.id === id);
+      if (emp) document.getElementById('trabNombre').textContent = emp.nombre + ' ' + emp.apellido;
+      document.getElementById('trabBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-3)">Cargando...</div>';
+
+      try {
+        const r = await fetch('/documentos/por-empleado/' + id);
+        const d = await r.json();
+        const docs = d.success ? d.data : [];
+        const imssColor = emp?.imss_vigente === true ? 'var(--success)' : emp?.imss_vigente === false ? 'var(--danger)' : 'var(--text-3)';
+        const imssLabel = emp?.imss_vigente === true ? '✓ VIGENTE' : emp?.imss_vigente === false ? '✗ NO VIGENTE' : '—';
+        const estatusColor = emp?.estatus === 'activo' ? 'var(--success)' : emp?.estatus === 'vetado' ? 'var(--danger)' : 'var(--text-3)';
+
+        const botonesEstatus = ROL === 'seguridad_fisica' ? `
+          <div style="display:flex;gap:10px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+            <button onclick="cambiarEstatus('activo')"
+              style="flex:1;padding:10px;background:var(--success-bg);border:1.5px solid var(--success);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
+              ✓ ACTIVAR TRABAJADOR
+            </button>
+            <button onclick="cambiarEstatus('vetado')"
+              style="flex:1;padding:10px;background:var(--danger-bg);border:1.5px solid var(--danger);color:var(--danger);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
+              ✗ VETAR TRABAJADOR
+            </button>
+          </div>` : '';
+
+        document.getElementById('trabBody').innerHTML = botonesEstatus +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">' +
+            '<div><div class="detalle-field-label">EMPRESA</div><div class="detalle-field-value">' + (emp?.empresa||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">CARGO</div><div class="detalle-field-value">' + (emp?.cargo||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">ÁREA</div><div class="detalle-field-value">' + (emp?.area||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">CURP</div><div class="detalle-field-value mono">' + (emp?.documento_identidad||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">IMSS</div><div class="detalle-field-value" style="color:' + imssColor + '">' + imssLabel + '</div></div>' +
+            '<div><div class="detalle-field-label">ESTATUS</div><div class="detalle-field-value" style="color:' + estatusColor + '">' + (emp?.estatus||'—').toUpperCase() + '</div></div>' +
+            '<div><div class="detalle-field-label">NSS</div><div class="detalle-field-value mono">' + (emp?.imss_nss||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">VIGENCIA IMSS</div><div class="detalle-field-value">' + (emp?.imss_fecha_vigencia||'—') + '</div></div>' +
+            '<div><div class="detalle-field-label">REGISTRO</div><div class="detalle-field-value">' + (emp?.creado_en ? new Date(emp.creado_en).toLocaleDateString('es-MX') : '—') + '</div></div>' +
+          '</div>' +
+          '<div style="font-family:Barlow Condensed,sans-serif;font-size:12px;letter-spacing:1px;color:var(--accent);margin-bottom:12px">DOCUMENTOS</div>' +
+          (!docs.length ? '<div style="color:var(--text-3);padding:20px;text-align:center">Sin documentos registrados.</div>' :
+            docs.map(doc => {
+              const badgeColor = doc.estado_validacion === 'aprobado' ? 'var(--success)' : doc.estado_validacion === 'rechazado' ? 'var(--danger)' : 'var(--warning)';
+              const esIMSS = doc.doc_type === 'IMSS';
+              const info = esIMSS
+                ? 'NSS: ' + (doc.extracted_json?.nss||'—') + ' | ' + (doc.extracted_json?.vigente ? '✓ VIGENTE' : '✗ NO VIGENTE') + ' | Hasta: ' + (doc.extracted_json?.fecha_vigencia||'—')
+                : 'CURP: ' + (doc.extracted_json?.curp||'—') + ' | ' + (doc.extracted_json?.nombre||'');
+              return '<div style="padding:12px;border:1px solid var(--border);margin-bottom:8px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+                  '<div style="display:flex;gap:8px;align-items:center">' +
+                    '<span style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:var(--text)">' + (doc.doc_type||'Procesando...') + '</span>' +
+                    '<span style="font-size:11px;padding:2px 8px;border:1px solid ' + badgeColor + ';color:' + badgeColor + '">' + (doc.estado_validacion||'').toUpperCase() + '</span>' +
+                  '</div>' +
+                  '<span style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + (doc.created_at ? new Date(doc.created_at).toLocaleDateString('es-MX') : '') + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px;color:var(--text-2);font-family:Share Tech Mono,monospace;margin-bottom:8px">' + info + '</div>' +
+                (doc.image_base64 ? '<img src="data:' + doc.image_mime + ';base64,' + doc.image_base64 + '" style="max-width:100%;max-height:160px;object-fit:contain;border:1px solid var(--border);display:block">' : '') +
+              '</div>';
+            }).join('')
+          );
+      } catch(e) {
+        document.getElementById('trabBody').innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
+      }
+    }
+
+    function cerrarModalTrabajador() {
+      document.getElementById('modalTrabajador').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    async function cambiarEstatus(estatus) {
+      const id = currentEmpleadoId;
+      if (!id) return;
+      const emp = allPersonal.find(e => e.id === id);
+      const nombre = emp ? emp.nombre + ' ' + emp.apellido : 'este trabajador';
+      const label = estatus === 'activo' ? 'ACTIVAR' : 'VETAR';
+      if (!confirm('¿Confirmas ' + label + ' a ' + nombre + '?')) return;
+      try {
+        const r = await fetch('/facial/empleados/' + id + '/estatus', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estatus })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Error');
+        if (emp) { emp.estatus = estatus; emp.activo = estatus === 'activo'; }
+        filtrarPersonal();
+        cerrarModalTrabajador();
+        const msg = document.createElement('div');
+        msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--black);color:var(--accent);padding:14px 20px;font-family:Barlow Condensed,sans-serif;font-size:14px;letter-spacing:1px;z-index:9999;border:1px solid var(--accent)';
+        msg.textContent = estatus === 'activo' ? '✓ Trabajador ACTIVADO' : '✗ Trabajador VETADO';
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 3000);
+      } catch(e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    cargarPersonal();
+  </script>
+</body>
+</html>

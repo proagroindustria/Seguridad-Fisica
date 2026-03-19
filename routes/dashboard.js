@@ -16,4 +16,12 @@ router.get('/', requireAuth, (req, res) => {
   });
 });
 
+// GET /personal
+router.get('/personal', requireAuth, (req, res) => {
+  const rol = req.session.user.rol;
+  if (rol !== 'contratista' && rol !== 'seguridad_fisica')
+    return res.redirect('/dashboard');
+  res.render('personal', { user: req.session.user });
+});
+
 module.exports = router;
