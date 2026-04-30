@@ -193,13 +193,16 @@ async function verificarPersonalOcupado(rowId, nombre) {
         const inp = document.getElementById(`inp-${rowId}-nombre`);
         const filas = seccionesAgregadas['personal'] || [];
         const fila = filas.find(f => f._id === rowId);
-        if (isPaseVisitaActive()) {
-          // En pase de visita solo advertir — pueden existir dos personas distintas con el mismo nombre
+        if (isPaseVisitaActive() || data.solo_nombre) {
+          // Sin identificador confirmado: solo advertir, no bloquear
           avisoEl.style.color = 'var(--warning)';
-          avisoEl.textContent = `⚠ Hay un ${data.folio} activo con este nombre — confirma que es otra persona`;
+          avisoEl.textContent = data.solo_nombre
+            ? `⚠ Hay una persona con este nombre en ${data.folio} — selecciona del autocomplete para confirmar`
+            : `⚠ Hay un ${data.folio} activo con este nombre — confirma que es otra persona`;
           if (inp) { inp.style.borderColor = 'var(--warning)'; inp.style.background = 'rgba(245,158,11,0.05)'; }
           if (fila) fila._bloqueado = false;
         } else {
+          // Identificador (NSS o credencial) confirma que es la misma persona → bloquear
           avisoEl.style.color = 'var(--danger)';
           avisoEl.textContent = `⛔ Ya está en ${data.folio} (${data.estado}) · vence ${formatFecha(data.fecha_fin)}`;
           if (inp) { inp.style.borderColor = 'var(--danger)'; inp.style.background = 'rgba(239,68,68,0.05)'; }
