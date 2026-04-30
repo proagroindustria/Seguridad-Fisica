@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS permiso_personal (
     nombre         VARCHAR(150) NOT NULL,
     categoria      VARCHAR(100),
     observaciones  TEXT,
+    nss            VARCHAR(20),
     creado_en      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
