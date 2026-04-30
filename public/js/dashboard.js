@@ -207,12 +207,19 @@ async function verificarPersonalOcupado(rowId, nombre) {
         }
         verificarBotonSubmit();
       } else {
-        avisoEl.textContent = '';
         const inp = document.getElementById(`inp-${rowId}-nombre`);
-        if (inp) { inp.style.borderColor = ''; inp.style.background = ''; }
-        const filas = seccionesAgregadas['personal'] || [];
-        const fila = filas.find(f => f._id === rowId);
-        if (fila) fila._bloqueado = false;
+        const filas2 = seccionesAgregadas['personal'] || [];
+        const fila2 = filas2.find(f => f._id === rowId);
+        if (!isPaseVisitaActive() && !trabajadorId) {
+          // Sin selección del autocomplete: mantener pista, no borrar aviso
+          avisoEl.style.color = 'var(--text-3)';
+          avisoEl.textContent = '↑ Selecciona del autocompletado';
+          if (inp) { inp.style.borderColor = ''; inp.style.background = ''; }
+        } else {
+          avisoEl.textContent = '';
+          if (inp) { inp.style.borderColor = ''; inp.style.background = ''; }
+        }
+        if (fila2) fila2._bloqueado = false;
         verificarBotonSubmit();
       }
     } catch(e) {
@@ -754,6 +761,7 @@ function verificarBotonSubmit() {
   const vehiculosValidos = filas.length === 0 || filas.every(fila => fila.validacion_ok === true);
 
   const personalBloqueado   = (seccionesAgregadas['personal'] || []).some(f => f._bloqueado === true);
+  const personalNoEnrolado  = !isPaseVisitaActive() && (seccionesAgregadas['personal'] || []).some(f => (f.nombre || '').trim().length > 0 && !f._empleadoId);
   const personalDocVencido  = isPaseVisitaActive() && (seccionesAgregadas['personal'] || []).some(f => f._docVencido === true);
   // En pase de visita, bloquear si hay filas de personal cuyo documento inline no está validado
   const filasPersonal = seccionesAgregadas['personal'] || [];
@@ -761,7 +769,7 @@ function verificarBotonSubmit() {
     filasPersonal.some(f => f._docInlineValidado !== true);
 
   const contratoOk = isPaseVisitaActive() || !!contrato;
-  const listo = empresa && contratoOk && responsable && resp1Val && fechaInicio && fechaFin && fechasValidas && vehiculosValidos && !personalBloqueado && !personalDocVencido && !personalDocNoValidado && tel1Ok && tel2Ok;
+  const listo = empresa && contratoOk && responsable && resp1Val && fechaInicio && fechaFin && fechasValidas && vehiculosValidos && !personalBloqueado && !personalNoEnrolado && !personalDocVencido && !personalDocNoValidado && tel1Ok && tel2Ok;
 
   btn.disabled = !listo;
   btn.style.opacity = listo ? '1' : '0.4';
@@ -987,15 +995,15 @@ function onNombreInput(rowId, value) {
     // Buscamos la fila en el objeto de secciones
     const fila = (seccionesAgregadas['personal'] || []).find(f => f._id === rowId);
 
-    // En PV, al escribir manualmente desvincular cualquier empleado enrolado previo
-    // para que validarDocPersonal no consulte la BD con un ID obsoleto
-    if (isPaseVisitaActive() && fila) {
-        fila._empleadoId = null;
-        if (fila._docVencido) {
-            fila._docVencido = false;
-            const warnEl = document.getElementById(`doc-warn-${rowId}`);
-            if (warnEl) { warnEl.textContent = ''; warnEl.style.color = ''; }
-        }
+    // Al escribir manualmente siempre desvincular el empleado seleccionado previo
+    if (fila) {
+      fila._empleadoId = null;
+      fila._nss = null;
+      if (isPaseVisitaActive() && fila._docVencido) {
+        fila._docVencido = false;
+        const warnEl = document.getElementById(`doc-warn-${rowId}`);
+        if (warnEl) { warnEl.textContent = ''; warnEl.style.color = ''; }
+      }
     }
     
     if (fila && fila._nombreExtraido) {
@@ -1051,6 +1059,27 @@ function onNombreInput(rowId, value) {
     }
     
     mostrarSugerencias(rowId);
+
+    // En solicitud normal: mostrar pista inmediata mientras no haya selección del autocomplete
+    if (!isPaseVisitaActive()) {
+      let avisoEl = document.getElementById(`aviso-personal-${rowId}`);
+      if (!avisoEl) {
+        const rowEl = document.getElementById(`row-${rowId}`);
+        if (rowEl) {
+          const td = rowEl.cells[2];
+          avisoEl = document.createElement('div');
+          avisoEl.id = `aviso-personal-${rowId}`;
+          avisoEl.style.cssText = 'font-size:11px;margin-top:3px;font-family:"Share Tech Mono",monospace';
+          td.appendChild(avisoEl);
+        }
+      }
+      if (avisoEl) {
+        avisoEl.style.color = 'var(--text-3)';
+        avisoEl.textContent = '↑ Selecciona del autocompletado';
+      }
+      verificarBotonSubmit();
+    }
+
     verificarPersonalOcupado(rowId, value);
 }
 
@@ -1086,6 +1115,10 @@ function seleccionarEmpleado(rowId, e) {
   const fila = (seccionesAgregadas['personal'] || []).find(f => f._id === rowId);
   if (fila && e.id) fila._empleadoId = e.id;
   if (fila) fila._nss = e.imss_nss || null;
+
+  // Limpiar pista de "selecciona del autocomplete" al confirmar la selección
+  const avisoSelEl = document.getElementById(`aviso-personal-${rowId}`);
+  if (avisoSelEl && avisoSelEl.textContent.includes('Selecciona')) avisoSelEl.textContent = '';
 
   cerrarSugerencias(rowId);
   verificarPersonalOcupado(rowId, `${e.nombre} ${e.apellido}`);
