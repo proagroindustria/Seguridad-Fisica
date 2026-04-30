@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -25,3 +26,4 @@ router.get('/personal', requireAuth, (req, res) => {
 });
 
 module.exports = router;
+

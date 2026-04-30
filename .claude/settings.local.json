@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^--$\")",
+      "Bash(sed 's/.*SELECT //')",
+      "Bash(sed 's/ FROM trabajadores.*//')"
+    ]
+  }
+}

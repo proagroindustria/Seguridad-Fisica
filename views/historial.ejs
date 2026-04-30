@@ -25,7 +25,7 @@
       <div class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></div>
       <div class="user-info">
         <span class="user-name"><%= user.nombre_completo %></span>
-        <span class="user-role-badge role-<%= user.rol %>">SEG. FÍSICA</span>
+        <span class="user-role-badge role-<%= user.rol %>">VIG. FÍSICA</span>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -37,10 +37,6 @@
       <a href="/personal" class="nav-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span>Trabajadores Contratistas</span>
-      </a>
-      <a href="/verificar" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M3 20c0-4 4-7 9-7s9 3 9 7"/></svg>
-        <span>Registro de Asistencia</span>
       </a>
       <a href="/historial" class="nav-item active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
@@ -81,7 +77,7 @@
     <div class="page-content">
       <div class="section-header">
         <div>
-          <p class="section-eyebrow">SEGURIDAD FÍSICA</p>
+          <p class="section-eyebrow">VIGILANCIA FÍSICA</p>
           <h1 class="section-title">Registro de Incidencias</h1>
         </div>
         <div class="filter-bar" style="flex-wrap:wrap;gap:10px">
@@ -114,6 +110,7 @@
               <th>ÁREA</th>
               <th>EMPRESA</th>
               <th>SIMILITUD</th>
+              <th>IP</th>
             </tr>
           </thead>
           <tbody id="histTbody"></tbody>
@@ -148,7 +145,7 @@
       const mov  = document.getElementById('filtroMovimiento').value;
 
       const filtrados = allAccesos.filter(a => {
-        const nombre = ((a.nombre||'') + ' ' + (a.apellido||'')).toLowerCase();
+        const nombre = (a.nombre_completo||'').toLowerCase();
         return (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
       });
 
@@ -164,7 +161,7 @@
 
       tbody.innerHTML = data.map(a => {
         const fecha = a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
-        const nombre = a.nombre ? a.nombre + ' ' + a.apellido : 'Desconocido';
+        const nombre = a.nombre_completo || 'Desconocido';
         const similitud = a.similitud ? (parseFloat(a.similitud)*100).toFixed(1)+'%' : '—';
         const esEntrada = a.tipo_movimiento === 'entrada';
         const movColor = esEntrada ? 'var(--success)' : 'var(--danger)';
@@ -179,6 +176,7 @@
           '<td style="color:var(--text-2)">' + (a.area||'—') + '</td>' +
           '<td style="color:var(--text-2)">' + (a.empresa||'—') + '</td>' +
           '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + similitud + '</td>' +
+          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + (a.ip_origen||'—') + '</td>' +
         '</tr>';
       }).join('');
     }
@@ -189,10 +187,11 @@
         'Fecha/Hora': a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX') : '',
         'Movimiento': a.tipo_movimiento,
         'Resultado':  a.resultado,
-        'Empleado':   (a.nombre||'') + ' ' + (a.apellido||''),
+        'Empleado':   a.nombre_completo || '',
         'Área':       a.area || '',
         'Empresa':    a.empresa || '',
         'Similitud':  a.similitud ? (parseFloat(a.similitud)*100).toFixed(1)+'%' : '',
+        'IP':         a.ip_origen || '',
       })));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Accesos');
