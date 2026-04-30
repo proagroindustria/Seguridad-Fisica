@@ -551,6 +551,16 @@
         });
         const d = await r.json();
         if (!d.success) throw new Error(d.error || 'Error');
+        // Auto-guardar fecha_induccion si tiene valor y aún no estaba guardada
+        const inputFecha = document.getElementById('inputFechaInduccion');
+        if (inputFecha && inputFecha.value && (!emp || !emp.fecha_induccion)) {
+          await fetch('/facial/empleados/' + id + '/fecha-induccion', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fecha_induccion: inputFecha.value })
+          });
+          if (emp) emp.fecha_induccion = inputFecha.value;
+        }
         if (emp) { emp.estatus = estatus; emp.activo = estatus === 'activo'; }
         filtrarPersonal();
         cerrarModalTrabajador();
