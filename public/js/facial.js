@@ -36,7 +36,7 @@ const Facial = {
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240, facingMode: 'user' }
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
       });
       this.videoEl.srcObject = this.stream;
       return true;
@@ -69,7 +69,6 @@ const Facial = {
 
       if (!detection) return null;
 
-      // Dibujar en canvas
       if (this.canvasEl) {
         const dims = faceapi.matchDimensions(this.canvasEl, this.videoEl, true);
         faceapi.draw.drawDetections(this.canvasEl,
@@ -117,14 +116,21 @@ const Facial = {
   },
 
   // ── Verificar rostro contra DB ────────────────────
+  // IP se obtiene en el servidor via x-forwarded-for (nginx), no desde el cliente
   async verificar(descriptor, tipo_movimiento = 'entrada') {
-    const res = await fetch('/facial/verificar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ descriptor, tipo_movimiento })
-    });
-    return res.json();
-  },
+  let ip_cliente = '';
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const d = await r.json();
+    ip_cliente = d.ip;
+  } catch(e) {}
+  const res = await fetch('/facial/verificar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ descriptor, tipo_movimiento, ip_cliente })
+  });
+  return res.json();
+},
 
   // ── Enrolar empleado ──────────────────────────────
   async enrolar(datos) {
@@ -146,5 +152,23 @@ const Facial = {
   async obtenerEmpleados() {
     const res = await fetch('/facial/empleados');
     return res.json();
-  }
+  },
+
+  // ── Verificar QR ──────────────────────────────────
+  // IP se obtiene en el servidor via x-forwarded-for (nginx), no desde el cliente
+  async verificarQR(qr_data) {
+  let ip_cliente = '';
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const d = await r.json();
+    ip_cliente = d.ip;
+  } catch(e) {}
+  const res = await fetch('/facial/verificar-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qr_data, ip_cliente })
+  });
+  return res.json();
+}
+
 };

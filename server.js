@@ -3,42 +3,47 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 
+
 const authRoutes      = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
 const solicitudesRoutes  = require('./routes/permisos');
 const { router: facialRoutes } = require('./routes/facial');
 const documentosRoutes = require('./routes/documentos');
+const retirosRoutes = require('./routes/retiros');
+
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3010;
 
-// View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware — limit aumentado para descriptores faciales
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/models', express.static(path.join(__dirname, 'public', 'models')));
 
-// Sesión
 app.use(session({
   secret: process.env.SESSION_SECRET || 'proagro_secret_2024',
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    secure: false,
-    maxAge: 8 * 60 * 60 * 1000 // 8 horas
-  }
+  cookie: { secure: false }
 }));
 
-// Rutas
+app.get('/retiros', (req, res) => {
+  if (!req.session.user) return res.redirect('/login');
+  const rol = req.session.user.rol;
+  if (rol !== 'contratista' && rol !== 'seguridad_fisica') return res.redirect('/dashboard');
+  res.render('retiros', { user: req.session.user });
+});
+
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/solicitudes', solicitudesRoutes);
 app.use('/facial', facialRoutes);
 app.use('/documentos', documentosRoutes);
+app.use('/retiros', retirosRoutes);
+
 
 app.get('/personal', (req, res) => {
   if (!req.session.user) return res.redirect('/login');
@@ -48,11 +53,16 @@ app.get('/personal', (req, res) => {
 });
 
 
-app.get('/verificar', (req, res) => {
-  if (!req.session.user) return res.redirect('/login');
-  if (req.session.user.rol !== 'seguridad_fisica') return res.redirect('/dashboard');
-  res.render('verificar', { user: req.session.user });
+function requireAsistenciaAuth(req, res, next) {
+  if (req.session.asistencia_user) return next();
+  res.redirect('/login-asistencia');
+}
+
+
+app.get('/verificar', requireAsistenciaAuth, (req, res) => {
+  res.render('verificar', { user: req.session.asistencia_user });
 });
+
 
 app.get('/historial', (req, res) => {
   if (!req.session.user) return res.redirect('/login');
@@ -61,25 +71,357 @@ app.get('/historial', (req, res) => {
 });
 
 
-// Ruta raíz
+const https = require('https');
+const http  = require('http');
+
+
+async function proxyN8N(url, body) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const data   = JSON.stringify(body);
+    const lib    = parsed.protocol === 'https:' ? https : http;
+    const req = lib.request({
+      hostname: parsed.hostname,
+      port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path:     parsed.pathname,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    }, res => {
+      let raw = '';
+      res.on('data', chunk => raw += chunk);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch(e) { resolve({ ok: false, error: 'Parse error' }); } });
+    });
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+
+app.post('/api/procesar-seguro', async (req, res) => {
+  try {
+    const url = process.env.N8N_SEGURO_URL;
+    if (!url) return res.json({ ok: false, error: 'N8N_SEGURO_URL no configurado' });
+    res.json(await proxyN8N(url, req.body));
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+
+app.post('/api/procesar-licencia', async (req, res) => {
+  try {
+    const url = process.env.N8N_LICENCIA_URL;
+    if (!url) return res.json({ ok: false, error: 'N8N_LICENCIA_URL no configurado' });
+    res.json(await proxyN8N(url, req.body));
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+
+app.post('/api/procesar-tarjeta', async (req, res) => {
+  try {
+    const url = process.env.N8N_TARJETA_URL;
+    if (!url) return res.json({ ok: false, error: 'N8N_TARJETA_URL no configurado' });
+    const data = await proxyN8N(url, req.body);
+    res.json(data);
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+const { Pool } = require('pg');
+const poolFacialServer = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.FACIAL_DB_NAME || 'reconocimiento_db',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+
+// ── Pool bd_principal ─────────────────────────────
+const poolBDPrincipal = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.BD_PRINCIPAL_NAME || 'bd_principal',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+
+app.get('/api/empleados-internos', (req, res, next) => {
+  if (!req.session.user) return res.status(401).json({ success: false, error: 'No autenticado' });
+  next();
+}, async (req, res) => {
+  try {
+    const r = await poolBDPrincipal.query(
+      `SELECT id, nombre, apellido_paterno, apellido_materno 
+       FROM empleados 
+       WHERE activo = true 
+       ORDER BY apellido_paterno, nombre`
+    );
+    res.json({ success: true, data: r.rows });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/login-asistencia', (req, res) => {
+  if (req.session.asistencia_user) return res.redirect('/verificar');
+  res.render('login-asistencia', { error: null });
+});
+
 app.get('/', (req, res) => {
-  if (req.session.user) {
-    return res.redirect('/dashboard');
-  }
+  if (req.session.user) return res.redirect('/dashboard');
   res.redirect('/login');
 });
 
-// 404
 app.use((req, res) => {
-  if (req.accepts('json')) {
-    res.status(404).json({ error: 'Ruta no encontrada' });
-  } else {
-    res.status(404).redirect('/login');
-  }
+  if (req.accepts('json')) res.status(404).json({ error: 'Ruta no encontrada' });
+  else res.status(404).redirect('/login');
 });
+
+// =====================================================
+// AUTO-VENCIMIENTO DE PERMISOS
+// Flujo:
+//   1. Al arrancar → ejecuta inmediatamente (cubre caídas del servidor)
+//   2. Cada día a la 1:00 AM → ejecuta automáticamente
+//   3. Servidor arriba semanas → setInterval de 24h lo mantiene
+// =====================================
+// =====================================================
+const poolCron = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.DB_NAME || 'seguridad_fisica',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+const poolFacialCron = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.FACIAL_DB_NAME || 'reconocimiento_db',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+async function vencerPermisosExpirados() {
+  try {
+    const r = await poolCron.query(`
+      UPDATE permisos
+      SET estado = 'vencido', actualizado_en = NOW()
+      WHERE estado NOT IN ('rechazado', 'vencido')
+        AND fecha_fin < CURRENT_DATE
+      RETURNING id, folio, es_pase_visita
+    `);
+    if (r.rowCount > 0) {
+      console.log(`⏰ Auto-vencimiento: ${r.rowCount} permiso(s) vencido(s):`, r.rows.map(x => x.folio).join(', '));
+
+      // Liberar trabajadores/invitados al vencer
+      for (const permiso of r.rows) {
+        try {
+          const tRes = await poolCron.query(
+            'SELECT nombre FROM permiso_personal WHERE permiso_id = $1',
+            [permiso.id]
+          );
+
+          // Pase de visita: borrar invitados directamente sin verificar otros permisos
+          if (permiso.es_pase_visita) {
+            for (const t of tRes.rows) {
+              if (!t.nombre) continue;
+              const partes = t.nombre.trim().split(/\s+/);
+              const nom = partes[0] || '';
+              const ape = partes.slice(1).join(' ') || '';
+              const invRes = await poolFacialCron.query(
+                `SELECT id, nombre, apellido, area, empresa FROM trabajadores
+                 WHERE es_invitado = true
+                   AND LOWER(TRIM(nombre)) = LOWER($1)
+                   AND LOWER(TRIM(apellido)) = LOWER($2)`,
+                [nom, ape]
+              );
+              for (const w of invRes.rows) {
+                const nombreCompleto = `${w.nombre} ${w.apellido}`;
+                await poolFacialCron.query(
+                  `UPDATE accesos SET nombre_snapshot=$1, area_snapshot=$2, empresa_snapshot=$3
+                   WHERE empleado_id=$4 AND nombre_snapshot IS NULL`,
+                  [nombreCompleto, w.area, w.empresa, w.id]
+                );
+                await poolFacialCron.query(`UPDATE accesos SET empleado_id=NULL WHERE empleado_id=$1`, [w.id]);
+                await poolFacialCron.query(`DELETE FROM documentos WHERE empleado_id=$1`, [w.id]);
+                await poolFacialCron.query(`DELETE FROM trabajadores WHERE id=$1`, [w.id]);
+                console.log(`🗑️  Invitado eliminado: ${nombreCompleto} (pase ${permiso.folio})`);
+              }
+            }
+            continue;
+          }
+
+          // Permiso normal: liberar solo si no tiene otro permiso activo
+          for (const t of tRes.rows) {
+            if (!t.nombre) continue;
+
+            const otrosRes = await poolCron.query(
+              `SELECT COUNT(*) AS cnt FROM permiso_personal pp
+               JOIN permisos p ON p.id = pp.permiso_id
+               WHERE LOWER(TRIM(pp.nombre)) = LOWER(TRIM($1))
+                 AND p.estado = 'activo'
+                 AND pp.permiso_id != $2`,
+              [t.nombre, permiso.id]
+            );
+            if (parseInt(otrosRes.rows[0].cnt) > 0) continue;
+
+            const wRes = await poolFacialCron.query(
+              `SELECT id, nombre, apellido, area, empresa FROM trabajadores
+               WHERE es_invitado IS NOT TRUE
+                 AND LOWER(TRIM(nombre) || ' ' || TRIM(apellido)) = LOWER(TRIM($1))`,
+              [t.nombre]
+            );
+            for (const w of wRes.rows) {
+              const nombreCompleto = `${w.nombre} ${w.apellido}`;
+              await poolFacialCron.query(
+                `UPDATE accesos SET nombre_snapshot=$1, area_snapshot=$2, empresa_snapshot=$3
+                 WHERE empleado_id=$4 AND nombre_snapshot IS NULL`,
+                [nombreCompleto, w.area, w.empresa, w.id]
+              );
+              await poolFacialCron.query(`UPDATE accesos SET empleado_id=NULL WHERE empleado_id=$1`, [w.id]);
+              await poolFacialCron.query(`DELETE FROM documentos WHERE empleado_id=$1`, [w.id]);
+              await poolFacialCron.query(`DELETE FROM trabajadores WHERE id=$1`, [w.id]);
+              console.log(`🗑️  Trabajador liberado: ${nombreCompleto} (permiso ${permiso.folio})`);
+            }
+          }
+        } catch(e) {
+          console.error(`❌ Error liberando trabajadores de ${permiso.folio}:`, e.message);
+        }
+      }
+    } else {
+      console.log('⏰ Auto-vencimiento: sin permisos que vencer.');
+    }
+  } catch(e) {
+    console.error('❌ Error en auto-vencimiento:', e.message);
+  }
+}
+
+async function limpiarTrabajadoresSinPermiso() {
+
+  //el 7 es la variable de los dias en los que se van a eliminar
+  const DIAS_GRACIA = parseInt(process.env.DIAS_GRACIA_LIMPIEZA || '7', 10);
+  try {
+    // Nombres que tienen al menos un permiso que no esté rechazado ni vencido
+    const permisosRes = await poolCron.query(`
+      SELECT DISTINCT LOWER(TRIM(pp.nombre)) AS nombre
+      FROM permiso_personal pp
+      JOIN permisos p ON p.id = pp.permiso_id
+      WHERE p.estado NOT IN ('rechazado', 'vencido')
+    `);
+    const conPermiso = new Set(permisosRes.rows.map(r => r.nombre));
+
+    // Trabajadores (no invitados) activos registrados hace más de DIAS_GRACIA días
+    const trabRes = await poolFacialCron.query(
+      `SELECT id, nombre, apellido, area, empresa
+       FROM trabajadores
+       WHERE es_invitado IS NOT TRUE
+         AND activo = true
+         AND creado_en < NOW() - ($1 * INTERVAL '1 day')`,
+      [DIAS_GRACIA]
+    );
+
+    let eliminados = 0;
+    for (const t of trabRes.rows) {
+      const nombreCompleto = `${t.nombre} ${t.apellido}`.toLowerCase().trim();
+      if (conPermiso.has(nombreCompleto)) continue;
+
+      await poolFacialCron.query(
+        `UPDATE accesos SET nombre_snapshot=$1, area_snapshot=$2, empresa_snapshot=$3
+         WHERE empleado_id=$4 AND nombre_snapshot IS NULL`,
+        [`${t.nombre} ${t.apellido}`, t.area, t.empresa, t.id]
+      );
+      await poolFacialCron.query(`UPDATE accesos SET empleado_id=NULL WHERE empleado_id=$1`, [t.id]);
+      await poolFacialCron.query(`DELETE FROM documentos WHERE empleado_id=$1`, [t.id]);
+      await poolFacialCron.query(`DELETE FROM trabajadores WHERE id=$1`, [t.id]);
+      console.log(`🧹 Sin permiso eliminado: ${t.nombre} ${t.apellido} (${t.empresa || '—'})`);
+      eliminados++;
+    }
+
+    if (eliminados > 0) {
+      console.log(`🧹 Limpieza: ${eliminados} trabajador(es) huérfano(s) eliminado(s) (>${DIAS_GRACIA} días sin permiso).`);
+    } else {
+      console.log(`🧹 Limpieza: sin trabajadores huérfanos (gracia: ${DIAS_GRACIA} días).`);
+    }
+  } catch(e) {
+    console.error('❌ Error en limpieza de trabajadores sin permiso:', e.message);
+  }
+}
+
+
+function programarVencimiento() {
+  const ahora     = new Date();
+  const proxima1AM = new Date();
+  proxima1AM.setHours(1, 0, 0, 0); // 1:00:00 AM
+
+  // Si ya pasó la 1:00 AM de hoy, programar para mañana
+  if (ahora >= proxima1AM) {
+    proxima1AM.setDate(proxima1AM.getDate() + 1);
+  }
+
+  const msHasta1AM = proxima1AM - ahora;
+  console.log(`⏰ Próximo auto-vencimiento programado: ${proxima1AM.toLocaleString('es-MX')}`);
+
+  setTimeout(async () => {
+    await vencerPermisosExpirados();
+    await limpiarTrabajadoresSinPermiso();
+    // Después de la primera ejecución a la 1AM, repetir cada 24h exactas
+    setInterval(async () => {
+      await vencerPermisosExpirados();
+      await limpiarTrabajadoresSinPermiso();
+    }, 24 * 60 * 60 * 1000);
+  }, msHasta1AM);
+}
+
+const poolMigration = require('./db/connection');
+poolMigration.query(
+  `ALTER TABLE permisos ADD COLUMN IF NOT EXISTS es_pase_visita BOOLEAN NOT NULL DEFAULT FALSE`
+).then(() =>
+  poolMigration.query(`
+    CREATE OR REPLACE VIEW vista_permisos AS
+    SELECT
+      p.id, p.folio, p.empresa, p.contrato, p.responsable_contrato,
+      p.responsable1, p.responsable2, p.responsable1_tel, p.responsable2_tel,
+      p.fecha_inicio, p.fecha_fin,
+      (p.fecha_fin - p.fecha_inicio) AS dias_duracion,
+      p.estado,
+      CASE p.estado
+        WHEN 'borrador'            THEN 'Borrador'
+        WHEN 'en_espera_area'      THEN 'En espera del Área'
+        WHEN 'aprobado_area'       THEN 'Aprobado por Área'
+        WHEN 'en_espera_seguridad' THEN 'En espera de Seguridad'
+        WHEN 'activo'              THEN 'Activo'
+        WHEN 'rechazado'           THEN 'Rechazado'
+        WHEN 'vencido'             THEN 'Vencido'
+      END AS estado_legible,
+      p.es_pase_visita,
+      uc.nombre_completo AS creado_por_nombre,
+      ua.nombre_completo AS aprobado_area_nombre,
+      us.nombre_completo AS aprobado_seg_nombre,
+      ur.nombre_completo AS rechazado_por_nombre,
+      p.motivo_rechazo, p.fecha_envio,
+      p.fecha_aprobacion_area, p.fecha_aprobacion_seg,
+      p.fecha_rechazo, p.creado_en, p.actualizado_en,
+      p.firma_creacion_ip, p.firma_creacion_ip_privada,
+      p.firma_creacion_ubicacion, p.firma_creacion_fecha, p.firma_creacion_usuario,
+      p.firma_area_ip, p.firma_area_ip_privada,
+      p.firma_area_ubicacion, p.firma_area_fecha, p.firma_area_usuario,
+      p.firma_aprobacion_ip, p.firma_aprobacion_ip_privada,
+      p.firma_aprobacion_ubicacion, p.firma_aprobacion_fecha, p.firma_aprobacion_usuario
+    FROM permisos p
+    LEFT JOIN usuarios uc ON p.creado_por             = uc.id
+    LEFT JOIN usuarios ua ON p.aprobado_por_area      = ua.id
+    LEFT JOIN usuarios us ON p.aprobado_por_seguridad = us.id
+    LEFT JOIN usuarios ur ON p.rechazado_por          = ur.id
+  `)
+).catch(e => console.warn('[migration] vista_permisos:', e.message));
 
 app.listen(PORT, () => {
   console.log(`\n🌱 PROAGRO - Sistema de Permisos`);
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
   console.log(`📋 Modo: ${process.env.OFFLINE_MODE === 'true' ? 'SIN BASE DE DATOS (offline)' : 'PostgreSQL'}\n`);
+
+  // 1. Ejecutar al arrancar — cubre permisos vencidos mientras el servidor estuvo caído
+  vencerPermisosExpirados();
+  limpiarTrabajadoresSinPermiso();
+
+  // 2. Programar ejecución diaria a la 1:00 AM
+  programarVencimiento();
 });

@@ -23,12 +23,12 @@
         </div>
       </div>
       <h1 class="brand-name">PROAGRO</h1>
-      <p class="brand-subtitle">SISTEMA DE CONTROL DE PERMISOS</p>
+      <p class="brand-subtitle">SISTEMA DE CONTROL DE ACCESOS</p>
       <div class="brand-divider"></div>
       <p class="brand-desc">Gestión integral de accesos y permisos para contratistas y personal autorizado.</p>
       <div class="status-bar">
-        <span class="status-dot"></span>
-        <span class="status-text">SISTEMA OPERATIVO</span>
+
+      
       </div>
     </div>
 
@@ -44,6 +44,14 @@
         <span><%= error %></span>
       </div>
       <% } %>
+
+
+      <% if (typeof query !== 'undefined' && query.registro === 'ok') { %>
+<div style="background:#1a3a1a;border:1px solid #2d6a2d;padding:12px 16px;margin-bottom:16px;
+            font-family:'Share Tech Mono',monospace;font-size:12px;color:#4ade80">
+  ✓ Cuenta creada correctamente. Ya puedes iniciar sesión.
+</div>
+<% } %>
 
       <form action="/login" method="POST" class="login-form">
         <div class="field-group">
@@ -90,6 +98,62 @@
           </svg>
         </button>
       </form>
+
+
+      <div style="margin-top:20px;text-align:center;">
+  <p style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#555;margin-bottom:10px">
+    ¿Eres un proveedor nuevo?
+  </p>
+  <a href="/registro" style="
+    display:inline-block;
+    font-family:'Share Tech Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.1em;
+    color:#c9a227;
+    border:1px solid #c9a227;
+    padding:8px 20px;
+    text-decoration:none;
+  ">CREAR CUENTA</a>
+</div>
+
+
+
+      <!-- Agregar entre </form> y <div class="form-footer"> -->
+<div style="margin-top: 16px; text-align: center;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <div style="flex:1;height:1px;background:#2a2a2a"></div>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#444;letter-spacing:1px">ACCESO ESPECIAL</span>
+    <div style="flex:1;height:1px;background:#2a2a2a"></div>
+  </div>
+  <a href="/login-asistencia" style="
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 13px;
+    background: #1a3a2a;
+    border: 1.5px solid #16a34a;
+    color: #16a34a;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 14px;0
+    letter-spacing: 2px;
+    text-decoration: none;
+    transition: all 0.2s;
+    box-sizing: border-box;
+  "
+  onmouseover="this.style.background='#16a34a';this.style.color='#fff'"
+  onmouseout="this.style.background='#1a3a2a';this.style.color='#16a34a'"
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M3 20c0-4 4-7 9-7s9 3 9 7"/>
+    </svg>
+    REGISTRO DE ASISTENCIA
+  </a>
+</div>
+
 
       <div class="form-footer">
         <div class="footer-line">

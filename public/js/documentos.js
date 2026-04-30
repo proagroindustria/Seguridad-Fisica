@@ -92,18 +92,22 @@ async function cargarMisDocumentos() {
 }
 
 // ─── DRAG & DROP ──────────────────────────────────
+
 function docDragOver(e) {
   e.preventDefault();
   document.getElementById('docDropZone').style.borderColor = 'var(--accent)';
 }
+
 function docDragLeave() {
   document.getElementById('docDropZone').style.borderColor = 'var(--border)';
 }
+
 function docDrop(e) {
   e.preventDefault();
   docDragLeave();
   docProcesarArchivos(e.dataTransfer.files);
 }
+
 function docFilesSeleccionados(files) {
   docProcesarArchivos(files);
 }
@@ -902,4 +906,29 @@ function filtrarPersonal(empresa) {
     ? window._todoPersonalData.filter(e => e.empresa === empresa)
     : window._todoPersonalData;
   renderTablaPersonal(data, 'todoPersonalTabla');
+}
+
+function verImgDoc(src) {
+  const prev = document.getElementById('imgDocOverlay');
+  if (prev) prev.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'imgDocOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center';
+  const btn = document.createElement('button');
+  btn.textContent = '✕';
+  btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:99999;display:flex;align-items:center;justify-content:center';
+  btn.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = src;
+  img.style.cssText = 'max-width:90%;max-height:90vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
+  img.onclick = () => overlay.remove();
+  overlay.appendChild(btn);
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+  if (window._imgEscHandler) document.removeEventListener('keydown', window._imgEscHandler);
+  function escHandler(e) {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); }
+  }
+  window._imgEscHandler = escHandler;
+  document.addEventListener('keydown', escHandler);
 }

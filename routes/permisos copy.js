@@ -18,18 +18,12 @@ const fs   = require('fs');
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 
+
 async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
-  // 1. Obtener datos de la solicitud
-  const rSol = await pool.query(
-    `SELECT p.*, u.nombre_completo as responsable_nombre
-     FROM permisos p
-     LEFT JOIN usuarios u ON p.responsable_id = u.id
-     WHERE p.id = $1`, [solicitudId]
-  );
+  const rSol = await pool.query(`SELECT * FROM permisos WHERE id = $1`, [solicitudId]);
   if (!rSol.rows.length) return;
   const sol = rSol.rows[0];
 
-  // 2. Obtener personal de la solicitud
   const rPersonal = await pool.query(
     `SELECT pp.nombre, pp.num_credencial, pp.categoria
      FROM permiso_personal pp WHERE pp.permiso_id = $1`, [solicitudId]
@@ -39,21 +33,38 @@ async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
   const fechaInicio = sol.fecha_inicio ? new Date(sol.fecha_inicio).toLocaleDateString('es-MX') : '';
   const fechaFin    = sol.fecha_fin    ? new Date(sol.fecha_fin).toLocaleDateString('es-MX')    : '';
 
-  // 3. Crear PDF
   const outputDir = path.join(__dirname, '..', 'public', 'credenciales');
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   const fileName  = `credenciales_${sol.folio || solicitudId}.pdf`;
   const filePath  = path.join(outputDir, fileName);
 
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', margin: 20 });
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
+  // Tamaño INE en puntos (1mm = 2.8346pt)
+  const cW = 243; // 85.6mm
+  const cH = 153; // 54mm
+  const colGap = 14;
+  const rowGap = 14;
+  const cols = 2;
+  const marginX = 20;
+  const marginY = 20;
+
   for (let i = 0; i < rPersonal.rows.length; i++) {
     const p = rPersonal.rows[i];
-    if (i > 0) doc.addPage();
 
-    // Buscar CURP en tabla trabajadores
+    // Nueva página cada 8 credenciales
+    if (i > 0 && i % 8 === 0) doc.addPage();
+
+    const posInPage = i % 8;
+    const col = posInPage % cols;
+    const row = Math.floor(posInPage / cols);
+
+    const cX = marginX + col * (cW + colGap);
+    const cY = marginY + row * (cH + rowGap);
+
+    // Buscar CURP
     let curp = p.num_credencial || '';
     try {
       const rT = await poolFacial.query(
@@ -63,88 +74,65 @@ async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
       if (rT.rows.length) curp = rT.rows[0].documento_identidad || curp;
     } catch(e) {}
 
-    // Contenido del QR
+    // Contenido QR
     const qrData = JSON.stringify({
-      folio:       sol.folio || String(solicitudId),
-      nombre:      p.nombre,
-      curp:        curp,
-      empresa:     sol.empresa || '',
+      folio: sol.folio || String(solicitudId),
+      nombre: p.nombre,
+      curp,
+      empresa: sol.empresa || '',
       fecha_inicio: fechaInicio,
-      fecha_fin:   fechaFin,
-      valido:      true
+      fecha_fin: fechaFin,
+      valido: true
     });
 
-    // Generar imagen QR
-    const qrBuffer = await QRCode.toBuffer(qrData, { width: 200, margin: 1 });
+    const qrBuffer = await QRCode.toBuffer(qrData, { width: 100, margin: 1 });
 
-    // Diseño de credencial
-    const pageW = doc.page.width;
-    const cW = 360, cH = 220;
-    const cX = (pageW - cW) / 2;
-    const cY = 80;
-
-    // Borde de credencial
-    doc.rect(cX, cY, cW, cH).lineWidth(2).stroke('#1a1a1a');
+    // Borde
+    doc.rect(cX, cY, cW, cH).lineWidth(1.5).stroke('#1a1a1a');
 
     // Header dorado
-    doc.rect(cX, cY, cW, 36).fill('#c9a227');
-    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(13)
-       .text('PROAGRO INDUSTRIA — PASE DE ACCESO', cX, cY + 10, { width: cW, align: 'center' });
+    doc.rect(cX, cY, cW, 22).fill('#c9a227');
+    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(7)
+       .text('PROAGRO INDUSTRIA — PASE DE ACCESO', cX, cY + 7, { width: cW, align: 'center' });
 
     // QR a la derecha
-    doc.image(qrBuffer, cX + cW - 150, cY + 44, { width: 140, height: 140 });
+    doc.image(qrBuffer, cX + cW - 88, cY + 26, { width: 82, height: 82 });
 
     // Info a la izquierda
-    doc.fillColor('#1a1a1a').font('Helvetica-Bold').fontSize(11)
-       .text('TRABAJADOR', cX + 16, cY + 48);
-    doc.font('Helvetica').fontSize(13).fillColor('#000')
-       .text(p.nombre, cX + 16, cY + 62, { width: 185 });
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6)
+       .text('TRABAJADOR', cX + 8, cY + 27);
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(8)
+       .text(p.nombre, cX + 8, cY + 36, { width: 148 });
 
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#555')
-       .text('CURP', cX + 16, cY + 92);
-    doc.font('Helvetica').fontSize(9).fillColor('#000')
-       .text(curp || '—', cX + 16, cY + 103, { width: 185 });
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6)
+       .text('CURP', cX + 8, cY + 58);
+    doc.fillColor('#000').font('Helvetica').fontSize(6.5)
+       .text(curp || '—', cX + 8, cY + 66, { width: 148 });
 
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#555')
-       .text('FOLIO SOLICITUD', cX + 16, cY + 118);
-    doc.font('Helvetica').fontSize(10).fillColor('#000')
-       .text(sol.folio || String(solicitudId), cX + 16, cY + 129);
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6)
+       .text('FOLIO', cX + 8, cY + 78);
+    doc.fillColor('#000').font('Helvetica').fontSize(7)
+       .text(sol.folio || String(solicitudId), cX + 8, cY + 86);
 
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#555')
-       .text('EMPRESA', cX + 16, cY + 144);
-    doc.font('Helvetica').fontSize(10).fillColor('#000')
-       .text(sol.empresa || '—', cX + 16, cY + 155);
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6)
+       .text('EMPRESA', cX + 8, cY + 97);
+    doc.fillColor('#000').font('Helvetica').fontSize(7)
+       .text(sol.empresa || '—', cX + 8, cY + 105, { width: 148 });
 
-
-
-           // Fechas en footer de credencial
-    doc.rect(cX, cY + cH - 32, cW, 32).fill('#f5f5f5');
-    doc.fillColor('#555').font('Helvetica-Bold').fontSize(8)
-       .text(`VÁLIDO DEL ${fechaInicio} AL ${fechaFin}`, cX, cY + cH - 20, { width: cW, align: 'center' });
-
-    // ✅ FIRMA DIGITAL - Agregar justo aquí (dentro del footer gris)
-    if (sol.firma_creacion_ip) {
-      doc.fillColor('#666').font('Helvetica').fontSize(5)
-         .text(`✍ Creación: ${sol.firma_creacion_ip} · ${sol.firma_creacion_ubicacion || '—'} · ${sol.firma_creacion_fecha ? new Date(sol.firma_creacion_fecha).toLocaleString('es-MX') : '—'}`, 
-               cX + 4, cY + cH - 10, { width: cW - 8, align: 'center' });
-    }
-    
-    if (sol.firma_aprobacion_ip) {
-      doc.fillColor('#666').font('Helvetica').fontSize(5)
-         .text(`✓ Autorización: ${sol.firma_aprobacion_ip} · ${sol.firma_aprobacion_fecha ? new Date(sol.firma_aprobacion_fecha).toLocaleString('es-MX') : '—'}`, 
-               cX + 4, cY + cH - 6, { width: cW - 8, align: 'center' });
-    }
-
-    // Título de página
-    doc.fillColor('#888').font('Helvetica').fontSize(9)
-       .text(`Credencial ${i+1} de ${rPersonal.rows.length} — Generada automáticamente al aprobar solicitud`, 40, cY + cH + 20, { width: pageW - 80, align: 'center' });
-
+    // Footer con fechas
+    doc.rect(cX, cY + cH - 22, cW, 22).fill('#f5f5f5');
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6)
+       .text(`VÁLIDO: ${fechaInicio} — ${fechaFin}`, cX, cY + cH - 13, { width: cW, align: 'center' });
   }
 
   doc.end();
   await new Promise((res, rej) => { stream.on('finish', res); stream.on('error', rej); });
   console.log(`[PDF QR] Generado: ${fileName} (${rPersonal.rows.length} trabajadores)`);
 }
+
+
+
+
 
 // =====================================================
 // WEBHOOK N8N — dispara cuando la solicitud queda Activo
@@ -160,7 +148,7 @@ async function dispararWebhookN8N(pool, solicitud_id) {
       pool.query('SELECT * FROM permiso_vehiculos WHERE permiso_id=$1 ORDER BY id', [solicitud_id]),
       pool.query('SELECT * FROM permiso_equipos   WHERE permiso_id=$1 ORDER BY id', [solicitud_id]),
     ]);
-
+    
     const payload = {
       solicitud:   rP.rows[0],
       personal:  rPer.rows,
@@ -261,11 +249,12 @@ router.post('/', requireAuth, async (req, res) => {
 
   const fi = new Date(fecha_inicio), ff = new Date(fecha_fin);
   const hoy = new Date(); hoy.setHours(0,0,0,0);
-  if (fi < hoy)   return res.status(400).json({ success: false, error: 'La fecha de inicio no puede ser anterior a hoy.' });
-  if (ff < fi)   return res.status(400).json({ success: false, error: 'La fecha fin debe ser posterior al inicio.' });
+  const fiSoloFecha = new Date(fecha_inicio + 'T12:00:00');
+const hoySoloFecha = new Date(); hoySoloFecha.setHours(0,0,0,0);
+if (fiSoloFecha < hoySoloFecha) return res.status(400).json({ success: false, error: 'La fecha de inicio no puede ser anterior a hoy.' });
+  if (ff <= fi)   return res.status(400).json({ success: false, error: 'La fecha fin debe ser posterior al inicio.' });
   if (Math.ceil((ff - fi) / (1000*60*60*24)) > 30)
     return res.status(400).json({ success: false, error: 'El período no puede exceder 30 días.' });
-
 
   const offline = process.env.OFFLINE_MODE !== 'false';
 
@@ -290,11 +279,13 @@ router.post('/', requireAuth, async (req, res) => {
   const pool = require('../db/connection');
   try {
     // 1. Insertar con folio temporal para obtener el ID real
+    const { responsable_contrato, responsable1, responsable2 } = req.body;
     const r1 = await pool.query(
-      `INSERT INTO permisos (folio, empresa, contrato, responsable_contrato, fecha_inicio, fecha_fin, estado, creado_por, fecha_envio)
-       VALUES ('TEMP', $1, $2, 'PROAGRO', $3, $4, 'en_espera_area', $5, NOW()) RETURNING id`,
-      [empresa.trim(), contrato.trim(), fecha_inicio, fecha_fin, user.id]
+      `INSERT INTO permisos (folio, empresa, contrato, responsable_contrato, responsable1, responsable2, fecha_inicio, fecha_fin, estado, creado_por, fecha_envio)
+      VALUES ('TEMP', $1, $2, $3, $4, $5, $6, $7, 'en_espera_area', $8, NOW()) RETURNING id`,
+      [empresa.trim(), contrato.trim(), responsable_contrato || 'PROAGRO', responsable1||null, responsable2||null, fecha_inicio, fecha_fin, user.id]
     );
+    
     const newId = r1.rows[0].id;
 
     // 2. Actualizar con folio definitivo usando el ID real (sin duplicados)
@@ -321,17 +312,40 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // 4. Insertar vehículos
-    if (sec.vehiculo && Array.isArray(sec.vehiculo)) {
-      for (const v of sec.vehiculo) {
-        if (!v.marca && !v.placas) continue;
-        await pool.query(
-          `INSERT INTO permiso_vehiculos (permiso_id, marca, modelo, placas, seguro, licencia)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [pid, v.marca||null, v.modelo||null, v.placas||null, v.seguro||null, v.licencia||null]
-        );
-      }
-    }
+if (sec.vehiculo && Array.isArray(sec.vehiculo)) {
+  for (const v of sec.vehiculo) {
+    if (!v.marca && !v.placas) continue;
 
+    const segExt  = v.seguro_extracted  || {};
+    const licExt  = v.licencia_extracted || {};
+
+    await pool.query(
+      `INSERT INTO permiso_vehiculos 
+        (permiso_id, marca, modelo, placas, seguro, licencia,
+         seguro_poliza, seguro_aseguradora, seguro_vigencia_inicio, seguro_vigencia_fin, seguro_vigente,
+         licencia_nombre, licencia_numero, licencia_tipo, licencia_vigencia_fin, licencia_vigente)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [
+        pid,
+        v.marca    || null,
+        v.modelo   || null,
+        v.placas   || null,
+        v.seguro   || null,
+        v.licencia || null,
+        segExt.numero_poliza   || null,
+        segExt.aseguradora     || null,
+        segExt.vigencia_inicio || null,
+        segExt.vigencia_fin    || null,
+        segExt.vigente         ?? null,
+        licExt.nombre_conductor || null,
+        licExt.numero_licencia  || null,
+        licExt.tipo_licencia    || null,
+        licExt.vigencia_fin     || null,
+        licExt.vigente          ?? null,
+      ]
+    );
+  }
+}
     // 5. Insertar equipos
     if (sec.equipo && Array.isArray(sec.equipo)) {
       for (const e of sec.equipo) {
@@ -359,12 +373,20 @@ router.post('/', requireAuth, async (req, res) => {
 router.put('/:id/aprobar', requireAuth, async (req, res) => {
   const user = req.session.user;
   const id = parseInt(req.params.id);
+  const offline = process.env.OFFLINE_MODE !== 'false';
 
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (offline) {
     const p = solicitudesMemoria.find(x => x.id === id);
     if (!p) return res.status(404).json({ success: false, error: 'Solicitud no encontrado.' });
-    if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success: false, error: `No puedes aprobar en estado "${ESTADO_LABEL[p.estado]}".` });
-    if (user.rol === 'area') { p.estado = 'en_espera_seguridad'; } else { p.estado = 'activo'; }
+    if (!puedeAprobar(user.rol, p.estado))
+      return res.status(403).json({ success: false, error: `No puedes aprobar una solicitud en estado "${ESTADO_LABEL[p.estado]}".` });
+    if (user.rol === 'area') {
+      p.estado = 'en_espera_seguridad';
+      p.aprobado_por_area = user.username;
+    } else {
+      p.estado = 'activo';
+      p.aprobado_por_seguridad = user.username;
+    }
     return res.json({ success: true, data: p });
   }
 
@@ -373,29 +395,30 @@ router.put('/:id/aprobar', requireAuth, async (req, res) => {
     const r = await pool.query('SELECT * FROM permisos WHERE id=$1', [id]);
     if (!r.rows.length) return res.status(404).json({ success: false, error: 'Solicitud no encontrado.' });
     const p = r.rows[0];
-    if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success: false, error: `No puedes aprobar en estado "${ESTADO_LABEL[p.estado]}".` });
+    if (!puedeAprobar(user.rol, p.estado))
+      return res.status(403).json({ success: false, error: `No puedes aprobar una solicitud en estado "${ESTADO_LABEL[p.estado]}".` });
 
-    const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
-    const { firma_ubicacion, firma_ip_privada } = req.body;
     let query, params;
-
     if (user.rol === 'area') {
-      query = `UPDATE permisos SET estado='en_espera_seguridad', aprobado_por_area=$1, fecha_aprobacion_area=NOW(),
-               firma_area_ip=$3, firma_area_ip_privada=$4, firma_area_ubicacion=$5, firma_area_fecha=NOW()
-               WHERE id=$2 RETURNING *`;
-      params = [user.id, id, ip, firma_ip_privada||null, firma_ubicacion||null];
+      query = `UPDATE permisos SET estado='en_espera_seguridad', aprobado_por_area=$1, fecha_aprobacion_area=NOW() WHERE id=$2 RETURNING *`;
+      params = [user.id, id];
     } else {
-      query = `UPDATE permisos SET estado='activo', aprobado_por_seguridad=$1, fecha_aprobacion_seg=NOW(),
-               firma_aprobacion_ip=$3, firma_aprobacion_ip_privada=$4, firma_aprobacion_ubicacion=$5, firma_aprobacion_fecha=NOW()
-               WHERE id=$2 RETURNING *`;
-      params = [user.id, id, ip, firma_ip_privada||null, firma_ubicacion||null];
+      query = `UPDATE permisos SET estado='activo', aprobado_por_seguridad=$1, fecha_aprobacion_seg=NOW() WHERE id=$2 RETURNING *`;
+      params = [user.id, id];
+    }
+    const r2 = await pool.query(query, params);
+
+    // Disparar webhook N8N si Seguridad acaba de aprobar (solicitud = activo)
+    if (user.rol === 'seguridad_fisica') {
+      dispararWebhookN8N(pool, id);
+      // Generar PDF con QR por trabajador (async, no bloquea respuesta)
+      generarPDFCredenciales(pool, poolFacial, id).catch(e => console.error('[PDF QR] Error:', e.message));
     }
 
-    const r2 = await pool.query(query, params);
-    if (user.rol === 'area') dispararWebhook(process.env.N8N_WEBHOOK_APROBADO_AREA, { evento:'aprobado_area', folio:p.folio, empresa:p.empresa, contrato:p.contrato, aprobado_por:user.nombre_completo||user.username, url_sistema:'https://seguridadfisica.proagroindustria.com/dashboard' });
-    if (user.rol === 'seguridad_fisica') { dispararWebhookN8N(pool, id); generarPDFCredenciales(pool, poolFacial, id).catch(e=>console.error('[PDF QR] Error:', e.message)); }
     return res.json({ success: true, data: r2.rows[0] });
-  } catch(e) { return res.status(500).json({ success: false, error: e.message }); }
+  } catch(e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // =====================================================
@@ -404,12 +427,17 @@ router.put('/:id/aprobar', requireAuth, async (req, res) => {
 router.put('/:id/rechazar', requireAuth, async (req, res) => {
   const user = req.session.user;
   const id = parseInt(req.params.id);
+  const { motivo } = req.body;
+  const offline = process.env.OFFLINE_MODE !== 'false';
 
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (offline) {
     const p = solicitudesMemoria.find(x => x.id === id);
     if (!p) return res.status(404).json({ success: false, error: 'Solicitud no encontrado.' });
-    if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success: false, error: `No puedes rechazar en estado "${ESTADO_LABEL[p.estado]}".` });
-    p.estado = 'rechazado'; p.motivo_rechazo = req.body.motivo||null;
+    if (!puedeRechazar(user.rol, p.estado))
+      return res.status(403).json({ success: false, error: `No puedes rechazar una solicitud en estado "${ESTADO_LABEL[p.estado]}".` });
+    p.estado = 'rechazado';
+    p.rechazado_por = user.username;
+    p.motivo_rechazo = motivo || null;
     return res.json({ success: true, data: p });
   }
 
@@ -418,26 +446,17 @@ router.put('/:id/rechazar', requireAuth, async (req, res) => {
     const r = await pool.query('SELECT * FROM permisos WHERE id=$1', [id]);
     if (!r.rows.length) return res.status(404).json({ success: false, error: 'Solicitud no encontrado.' });
     const p = r.rows[0];
-    if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success: false, error: `No puedes rechazar en estado "${ESTADO_LABEL[p.estado]}".` });
-
-    const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
-    const { motivo, firma_ubicacion, firma_ip_privada } = req.body;
-
+    if (!puedeRechazar(user.rol, p.estado))
+      return res.status(403).json({ success: false, error: `No puedes rechazar una solicitud en estado "${ESTADO_LABEL[p.estado]}".` });
     const r2 = await pool.query(
-      `UPDATE permisos SET estado='rechazado', rechazado_por=$1, motivo_rechazo=$2, fecha_rechazo=NOW(),
-       firma_rechazo_ip=$4, firma_rechazo_ip_privada=$5, firma_rechazo_ubicacion=$6, firma_rechazo_fecha=NOW()
-       WHERE id=$3 RETURNING *`,
-      [user.id, motivo||null, id, ip, firma_ip_privada||null, firma_ubicacion||null]
+      `UPDATE permisos SET estado='rechazado', rechazado_por=$1, motivo_rechazo=$2, fecha_rechazo=NOW() WHERE id=$3 RETURNING *`,
+      [user.id, motivo||null, id]
     );
-
-    const payload = { folio:p.folio, empresa:p.empresa, contrato:p.contrato, responsable:p.responsable_contrato||'', fecha_inicio:p.fecha_inicio, fecha_fin:p.fecha_fin, motivo_rechazo:motivo||'Sin motivo', rechazado_por:user.nombre_completo||user.username, url_sistema:'https://seguridadfisica.proagroindustria.com/dashboard' };
-    if (user.rol==='area') dispararWebhook(process.env.N8N_WEBHOOK_RECHAZADO_AREA, { ...payload, evento:'rechazado_area' });
-    if (user.rol==='seguridad_fisica') dispararWebhook(process.env.N8N_WEBHOOK_RECHAZADO_SEGURIDAD, { ...payload, evento:'rechazado_seguridad' });
-
     return res.json({ success: true, data: r2.rows[0] });
-  } catch(e) { console.error('Error rechazando:', e.message); return res.status(500).json({ success: false, error: e.message }); }
+  } catch(e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
-
 
 // =====================================================
 // GET /solicitudes/:id/historial
@@ -503,15 +522,46 @@ router.get('/:id', requireAuth, async (req, res) => {
       console.error('Error enriqueciendo IMSS:', imssErr.message);
     }
 
-    return res.json({
-      success: true,
-      data: {
-        solicitud:   rP.rows[0],
-        personal,
-        vehiculos: rVeh.rows,
-        equipos:   rEq.rows,
+    
+      // Enriquecer personal con imágenes de documentos
+      try {
+        for (const p of personal) {
+          if (!p.nombre) continue;
+          const partes = p.nombre.trim().toLowerCase().split(' ');
+          const primerNombre = partes[0];
+          const docResult = await poolFacial.query(`
+            SELECT t.id,
+              dc.image_base64 as cred_base64, dc.image_mime as cred_mime,
+              di.image_base64 as imss_base64, di.image_mime as imss_mime
+            FROM trabajadores t
+            LEFT JOIN documentos dc ON dc.empleado_id = t.id 
+              AND dc.doc_type IN ('INE','PASAPORTE')
+            LEFT JOIN documentos di ON di.empleado_id = t.id 
+              AND di.doc_type = 'IMSS'
+            WHERE LOWER(t.nombre) LIKE $1
+            LIMIT 1
+          `, [`%${primerNombre}%`]);
+          if (docResult.rows.length > 0) {
+            p.cred_base64 = docResult.rows[0].cred_base64 || null;
+            p.cred_mime   = docResult.rows[0].cred_mime   || 'image/jpeg';
+            p.imss_base64 = docResult.rows[0].imss_base64 || null;
+            p.imss_mime   = docResult.rows[0].imss_mime   || 'image/jpeg';
+          }
+        }
+      } catch(e) {
+        console.error('Error enriqueciendo docs personal:', e.message);
       }
-    });
+
+      return res.json({
+        success: true,
+        data: {
+          solicitud:   rP.rows[0],
+          personal,
+          vehiculos: rVeh.rows,
+          equipos:   rEq.rows,
+        }
+      });
+
   } catch(e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -675,10 +725,10 @@ router.post('/:id/lote', requireAuth, async (req, res) => {
         if (!rEq.rows.length) return res.status(404).json({ success: false, error: `Equipo id=${item.item_id} no encontrado.` });
         const rSal = await pool.query(
           `SELECT COALESCE(SUM(bli.cantidad),0) AS total
-           FROM bitacora_lote_items bli
-           JOIN bitacora_lotes bl ON bl.id = bli.lote_id
-           WHERE bl.permiso_id=$1 AND bli.tipo_item='equipo' AND bli.item_id=$2`,
-          [solicitud_id, item.item_id]
+          FROM bitacora_lote_items bli
+          JOIN bitacora_lotes bl ON bl.id = bli.lote_id
+          WHERE bl.permiso_id=$1 AND bli.tipo_item='equipo' AND bli.item_id=$2`,
+          [solicitud_id, item.item_id]  // ← pero el nombre del parámetro es permiso_id
         );
         const yaRegistrado = parseInt(rSal.rows[0].total);
         const cantMax = rEq.rows[0].cantidad;
@@ -692,11 +742,13 @@ router.post('/:id/lote', requireAuth, async (req, res) => {
     }
 
     // Insertar lote
+ 
     const rL = await pool.query(
-      `INSERT INTO bitacora_lotes (solicitud_id, registrado_por, observaciones)
-       VALUES ($1,$2,$3) RETURNING *`,
-      [solicitud_id, user.id, observaciones || null]
-    );
+        `INSERT INTO bitacora_lotes (permiso_id, registrado_por, observaciones)
+        VALUES ($1,$2,$3) RETURNING *`,
+        [solicitud_id, user.id, observaciones || null]
+      );
+
     const lote = rL.rows[0];
 
     // Insertar items del lote
@@ -798,112 +850,17 @@ router.get('/:id/accesos', requireAuth, async (req, res) => {
 router.get('/:id/credenciales', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
+    const pool = require('../db/connection');
     const rSol = await pool.query('SELECT folio FROM permisos WHERE id=$1', [id]);
     if (!rSol.rows.length) return res.status(404).json({ error: 'No encontrado' });
     const folio = rSol.rows[0].folio || String(id);
     const filePath = path.join(__dirname, '..', 'public', 'credenciales', `credenciales_${folio}.pdf`);
-    if (!fs.existsSync(filePath)) {
-      // Generar si no existe
-      await generarPDFCredenciales(pool, poolFacial, id);
-    }
+   
+   // Siempre regenerar
+    await generarPDFCredenciales(pool, poolFacial, id);
     res.download(filePath);
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
-
-// =====================================================
-// GET /solicitudes/:id/lotes — historial de lotes
-// =====================================================
-router.get('/:id/lotes', requireAuth, async (req, res) => {
-  const solicitud_id = parseInt(req.params.id);
-  const offline = process.env.OFFLINE_MODE !== 'false';
-
-  if (offline) {
-    const lotes = (global.lotesMemoria || []).filter(x => x.solicitud_id === solicitud_id);
-    return res.json({ success: true, data: lotes });
-  }
-
-  try {
-    const rL = await pool.query(
-      `SELECT bl.*, u.nombre_completo AS registrado_por_nombre
-       FROM bitacora_lotes bl
-       LEFT JOIN usuarios u ON bl.registrado_por = u.id
-       WHERE bl.permiso_id=$1
-       ORDER BY bl.registrado_en DESC`,
-      [solicitud_id]
-    );
-
-    const lotes = [];
-    for (const lote of rL.rows) {
-      const rI = await pool.query(
-        `SELECT bli.*,
-           CASE bli.tipo_item
-             WHEN 'personal' THEN pp.nombre
-             WHEN 'vehiculo' THEN CONCAT(pv.marca,' ',pv.modelo,' (',pv.placas,')')
-             WHEN 'equipo'   THEN pe.descripcion
-           END AS descripcion,
-           CASE bli.tipo_item
-             WHEN 'personal' THEN pp.num_credencial
-             WHEN 'vehiculo' THEN pv.placas
-             WHEN 'equipo'   THEN CAST(pe.cantidad AS TEXT)
-           END AS referencia
-         FROM bitacora_lote_items bli
-         LEFT JOIN permiso_personal  pp ON bli.tipo_item='personal' AND bli.item_id=pp.id
-         LEFT JOIN permiso_vehiculos pv ON bli.tipo_item='vehiculo' AND bli.item_id=pv.id
-         LEFT JOIN permiso_equipos   pe ON bli.tipo_item='equipo'   AND bli.item_id=pe.id
-         WHERE bli.lote_id=$1
-         ORDER BY bli.tipo_item, bli.id`,
-        [lote.id]
-      );
-      lotes.push({ ...lote, items: rI.rows });
-    }
-
-    return res.json({ success: true, data: lotes });
-  } catch(e) {
-    return res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// =====================================================
-// GET /solicitudes/:id/accesos — accesos faciales
-// =====================================================
-router.get('/:id/accesos', requireAuth, async (req, res) => {
-  const solicitud_id = parseInt(req.params.id);
-  try {
-    const result = await poolFacial.query(
-      `SELECT a.id, a.tipo_movimiento, a.fecha_hora, a.resultado,
-              e.nombre, e.apellido, e.empresa
-       FROM accesos a
-       LEFT JOIN trabajadores e ON a.empleado_id = e.id
-       WHERE a.permiso_id = $1
-         AND a.resultado = 'exitoso'
-       ORDER BY a.fecha_hora DESC
-       LIMIT 100`,
-      [solicitud_id]
-    );
-    res.json({ success: true, data: result.rows });
-  } catch(e) {
-    console.error('Error accesos solicitud:', e);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// =====================================================
-// GET /solicitudes/:id/credenciales — PDF credenciales
-// =====================================================
-router.get('/:id/credenciales', requireAuth, async (req, res) => {
-  const id = parseInt(req.params.id);
-  try {
-    const rSol = await pool.query('SELECT folio FROM permisos WHERE id=$1', [id]);
-    if (!rSol.rows.length) return res.status(404).json({ error: 'No encontrado' });
-    const folio = rSol.rows[0].folio || String(id);
-    const filePath = path.join(__dirname, '..', 'public', 'credenciales', `credenciales_${folio}.pdf`);
-    if (!fs.existsSync(filePath)) {
-      await generarPDFCredenciales(pool, poolFacial, id);
-    }
-    res.download(filePath);
+  
   } catch(e) {
     res.status(500).json({ error: e.message });
   }

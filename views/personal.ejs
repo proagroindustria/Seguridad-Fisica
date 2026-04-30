@@ -30,7 +30,7 @@
       <div class="user-info">
         <span class="user-name"><%= user.nombre_completo %></span>
         <span class="user-role-badge role-<%= user.rol %>">
-          <%= user.rol === 'area' ? 'ÁREA' : user.rol === 'seguridad_fisica' ? 'SEG. FÍSICA' : 'CONTRATISTA' %>
+          <%= user.rol === 'area' ? 'ÁREA' : user.rol === 'seguridad_fisica' ? 'VIG. FÍSICA' : 'CONTRATISTA' %>
         </span>
       </div>
     </div>
@@ -53,15 +53,6 @@
         </svg>
         <span>Mi Personal</span>
       </a>
-      <a href="/dashboard?accion=enrolar" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <line x1="19" y1="8" x2="19" y2="14"/>
-          <line x1="22" y1="11" x2="16" y2="11"/>
-        </svg>
-        <span>Gestión de Trabajadores</span>
-      </a>
       <% } %>
       <% if (user.rol === 'seguridad_fisica') { %>
       <a href="/personal" class="nav-item active">
@@ -72,13 +63,6 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
         <span>Trabajadores Contratistas</span>
-      </a>
-      <a href="/verificar" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="8" r="4"/>
-          <path d="M3 20c0-4 4-7 9-7s9 3 9 7"/>
-        </svg>
-        <span>Registro de Asistencia</span>
       </a>
       <a href="/historial" class="nav-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -126,10 +110,32 @@
       <!-- HEADER -->
       <div class="section-header">
         <div>
-          <p class="section-eyebrow"><%= user.rol === 'contratista' ? user.nombre_completo.toUpperCase() : 'SEGURIDAD FÍSICA' %></p>
+          <p class="section-eyebrow"><%= user.rol === 'contratista' ? user.nombre_completo.toUpperCase() : 'VIGILANCIA FÍSICA' %></p>
           <h1 class="section-title"><%= user.rol === 'contratista' ? 'Mi Personal' : 'Trabajadores Contratistas' %></h1>
         </div>
-        <div id="statsBar" style="display:flex;gap:10px"></div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="statsBar" style="display:flex;gap:10px"></div>
+          <% if (user.rol === 'contratista') { %>
+          <button onclick="abrirModalEnrolar()" style="
+            display:flex;align-items:center;gap:8px;
+            padding:10px 18px;
+            background:var(--accent);
+            color:#000;
+            border:none;
+            font-family:'Barlow Condensed',sans-serif;
+            font-weight:700;
+            font-size:13px;
+            letter-spacing:1px;
+            cursor:pointer;
+          ">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px;height:15px">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            AGREGAR TRABAJADOR
+          </button>
+          <% } %>
+        </div>
       </div>
 
       <!-- TOOLBAR -->
@@ -164,14 +170,12 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>TRABAJADOR</th>
+              <th>NOMBRE</th>
               <% if (user.rol === 'seguridad_fisica') { %><th>EMPRESA</th><% } %>
-              <th>CARGO / ÁREA</th>
-              <th>CURP</th>
-              <th>IMSS</th>
+              <th>NO. EMPLEADO</th>
+              <th>NSS</th>
+              <th>ÁREA</th>
               <th>ESTATUS</th>
-              <th>DOCS</th>
-              <th>REGISTRO</th>
               <th></th>
             </tr>
           </thead>
@@ -182,7 +186,7 @@
     </div>
   </div>
 
-  <!-- MODAL DETALLE -->
+  <!-- MODAL DETALLE TRABAJADOR -->
   <div class="modal-overlay" id="modalTrabajador">
     <div class="modal-box" style="max-width:720px;max-height:90vh;display:flex;flex-direction:column">
       <div class="modal-header">
@@ -198,14 +202,117 @@
     </div>
   </div>
 
+
+
+  <!-- MODAL: ENROLAR PERSONA — debe estar en el DOM ANTES que los scripts -->
+  <div class="modal-facial" id="modalEnrolar">
+    <div class="facial-box" style="width:580px;max-height:95vh;overflow-y:auto">
+      <div class="facial-header">
+        <h3>➕ Registrar Personal</h3>
+        <button class="modal-close" onclick="cerrarFacialEnrolar()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:18px;height:18px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="facial-body">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">PASO 1 — CAPTURA DE ROSTRO</div>
+        <div id="enrol-status" class="facial-status">⏳ Iniciando cámara...</div>
+        <div class="facial-cam-wrap">
+          <video id="enrol-video" autoplay muted playsinline></video>
+          <canvas id="enrol-canvas"></canvas>
+        </div>
+        <div id="enrol-cap-status" class="facial-status error">❌ Rostro no capturado</div>
+        <div style="display:flex;justify-content:center;margin-bottom:8px">
+          <button class="btn-facial" id="btn-enrol-capturar" onclick="capturarRostroEnrol()" disabled>CAPTURAR ROSTRO</button>
+        </div>
+        <div id="warn-foto" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400e">
+          ⚠ Debes capturar el rostro antes de continuar
+        </div>
+
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 2 — DATOS DEL TRABAJADOR</div>
+        <div class="facial-form-grid">
+         
+          <div class="facial-field"><label>Nombre(s) *</label><input type="text" id="enrol-nombre" placeholder="Nombre(s)" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+<div class="facial-field"><label>Apellidos *</label><input type="text" id="enrol-apellido" placeholder="Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+          <div class="facial-field"><label>Numero de empleado</label><input type="text" id="enrol-documento" placeholder="Numero de empleado"></div>
+          <div class="facial-field"><label>NSS</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarDuplicadoDebounced()"> </div>
+          <input type="hidden" id="enrol-empresa" value="">
+          <div class="facial-field"><label>Área</label><input type="text" id="enrol-area" placeholder="Área"></div>
+          <div class="facial-field"><label>Cargo</label><input type="text" id="enrol-cargo" placeholder="Cargo"></div>
+        <!--    <div class="facial-field"><label>Registro Patronal</label><input type="text" id="enrol-registro-patronal" placeholder="Registro Patronal"></div>-->
+        </div>
+
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 3 — DOCUMENTOS OBLIGATORIOS</div>
+
+        <div style="margin-bottom:4px">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">
+            CREDENCIAL (INE / PASAPORTE / LICENCIA) <span style="color:var(--danger)">*</span>
+          </div>
+          <div id="enrol-cred-drop" onclick="if(!enrolCredFile)document.getElementById('enrol-cred-input').click()"
+            style="border:2px dashed var(--border);padding:16px;text-align:center;cursor:pointer;transition:all 0.2s"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="enrolDropFile(event,'cred')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;margin:0 auto 4px;display:block;color:var(--text-3)">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span id="enrol-cred-label" style="font-size:12px;color:var(--text-3)">Arrastra o haz clic para subir un documento</span>
+            <input type="file" id="enrol-cred-input" accept=".jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="enrolArchivoSeleccionado(this,'cred')">
+          </div>
+          <div id="enrol-cred-proceso" style="display:none;margin-top:6px;padding:10px 14px;border:1px solid var(--border);font-family:'Share Tech Mono',monospace;font-size:12px"></div>
+          <button id="enrol-cred-retry" onclick="enrolReintentarDoc('cred')" style="display:none;margin-top:6px;padding:6px 14px;background:transparent;border:1px solid var(--warning);color:var(--warning);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer">↺ REINTENTAR DOCUMENTO</button>
+          <button id="enrol-cred-clear" onclick="enrolLimpiarDoc('cred')" style="display:none;margin-top:6px;margin-left:6px;padding:6px 14px;background:transparent;border:1px solid var(--danger);color:var(--danger);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer">✕ QUITAR</button>
+        </div>
+        <div id="warn-cred" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#92400e">
+          ⚠ El documento es obligatorio
+        </div>
+
+        <div id="enrol-save-status" style="display:none;margin-bottom:12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);text-align:center"></div>
+
+
+        <div id="warn-datos" style="display:none;align-items:center;gap:8px;background:#fee2e2;border:1px solid #ef4444;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#991b1b"></div>
+        
+        <div style="display:flex;gap:10px;justify-content:center">
+          <div id="enrol-pendiente-id" style="display:none"></div>
+          <button class="btn-aprobar" id="btn-enrol-guardar" onclick="guardarEnrolamiento()" disabled
+            style="opacity:0.4;cursor:not-allowed;pointer-events:none;">REGISTRAR PERSONAL</button>
+          <button class="btn-secondary" onclick="cerrarFacialEnrolar()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS — van después del HTML -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <script src="/js/facial.js"></script>
+  <script src="/js/documentos.js"></script>
+
   <script>
     const ROL = '<%= user.rol %>';
+    window._userRol = '<%= user.rol %>';
+    window._userEmpresa = '<%= user.nombre_completo %>';
+
     let allPersonal = [];
     let currentEmpleadoId = null;
+
+    // Variables enrolamiento
+    let facialDescriptorEnrol = null;
+    let facialModelos = false;
+    let enrolCredFile = null;
+    let enrolImssFile = null;
+    let enrolCredProcesado = false;
+    let enrolImssProcesado = false;
+    let enrolCredData = null;
+    let enrolImssData = null;
+    let enrolDuplicado = false;
+    let _duplicadoTimeout = null;
 
     function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarOverlay').classList.add('open'); }
     function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
 
+    // ===================== TABLA PERSONAL =====================
     async function cargarPersonal() {
       try {
         const url = ROL === 'contratista' ? '/facial/mi-personal' : '/facial/todo-personal';
@@ -224,7 +331,6 @@
           });
         }
 
-        // Stats
         const total    = d.data.length;
         const activos  = d.data.filter(e => e.estatus === 'activo').length;
         const noActivo = d.data.filter(e => e.estatus === 'no_activo').length;
@@ -250,7 +356,7 @@
       const estatus = document.getElementById('filtroEstatus').value;
 
       const filtrados = allPersonal.filter(e => {
-        const nombre = (e.nombre + ' ' + e.apellido).toLowerCase();
+        const nombre = ((e.nombre||'') + ' ' + (e.apellido||'')).toLowerCase();
         const matchBusq    = !busq || nombre.includes(busq) || (e.documento_identidad||'').toLowerCase().includes(busq) || (e.cargo||'').toLowerCase().includes(busq);
         const matchEmpresa = !empresa || e.empresa === empresa;
         const matchEstatus = !estatus || e.estatus === estatus;
@@ -268,7 +374,7 @@
       empty.style.display = 'none';
 
       tbody.innerHTML = data.map((e, i) => {
-        const iniciales = (e.nombre.charAt(0) + e.apellido.charAt(0)).toUpperCase();
+        const iniciales = ((e.nombre||'?').charAt(0) + (e.apellido||'?').charAt(0)).toUpperCase();
         const imss = e.imss_vigente === true
           ? '<span style="color:var(--success);font-size:11px">✓ VIGENTE</span>'
           : e.imss_vigente === false
@@ -282,88 +388,148 @@
         const fecha = e.creado_en ? new Date(e.creado_en).toLocaleDateString('es-MX') : '—';
 
         return '<tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="verTrabajador(' + e.id + ')" onmouseover="this.style.background=\'var(--bg-3)\'" onmouseout="this.style.background=\'\'">' +
-          '<td class="td-folio">' + (i+1) + '</td>' +
-          '<td><div style="display:flex;align-items:center;gap:10px">' +
-            '<div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + iniciales + '</div>' +
-            '<div><div style="font-weight:500;color:var(--text)">' + e.nombre + ' ' + e.apellido + '</div><div style="font-size:11px;color:var(--text-3)">' + (e.empresa||'') + '</div></div>' +
-          '</div></td>' +
-          (ROL === 'seguridad_fisica' ? '<td class="td-empresa">' + (e.empresa||'—') + '</td>' : '') +
-          '<td style="color:var(--text-2)">' + (e.cargo||'—') + (e.area ? ' / '+e.area : '') + '</td>' +
-          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + (e.documento_identidad||'—') + '</td>' +
-          '<td>' + imss + '</td>' +
-          '<td>' + estatusBadge + '</td>' +
-          '<td style="font-family:Share Tech Mono,monospace;color:var(--text-3)">' + (e.total_docs||0) + '</td>' +
-          '<td style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + fecha + '</td>' +
-          '<td><button onclick="event.stopPropagation();verTrabajador(' + e.id + ')" style="padding:5px 12px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-size:11px;letter-spacing:1px;cursor:pointer">VER</button></td>' +
-        '</tr>';
+        '<td class="td-folio">' + (i+1) + '</td>' +
+        '<td><div style="display:flex;align-items:center;gap:10px">' +
+          '<div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + iniciales + '</div>' +
+          '<div style="font-weight:500;color:var(--text)">' + (e.nombre||'') + ' ' + (e.apellido||'') + '</div>' +
+        '</div></td>' +
+        (ROL === 'seguridad_fisica' ? '<td class="td-empresa">' + (e.empresa||'—') + '</td>' : '') +
+        '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + (e.documento_identidad||'—') + '</td>' +
+        '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--accent)">' + (e.imss_nss||'—') + '</td>' +
+        '<td style="color:var(--text-2)">' + (e.area||'—') + '</td>' +
+        '<td>' + estatusBadge + '</td>' +
+        '<td><button onclick="event.stopPropagation();verTrabajador(' + e.id + ')" style="padding:5px 12px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-size:11px;letter-spacing:1px;cursor:pointer">VER</button></td>' +
+      '</tr>';
       }).join('');
     }
 
-    async function verTrabajador(id) {
-      currentEmpleadoId = id;
-      document.getElementById('modalTrabajador').classList.add('open');
-      document.body.style.overflow = 'hidden';
-      const emp = allPersonal.find(e => e.id === id);
-      if (emp) document.getElementById('trabNombre').textContent = emp.nombre + ' ' + emp.apellido;
-      document.getElementById('trabBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-3)">Cargando...</div>';
+   async function verTrabajador(id) {
+  currentEmpleadoId = parseInt(id);
+  document.getElementById('modalTrabajador').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  const emp = allPersonal.find(e => e.id === id);
+  if (emp) document.getElementById('trabNombre').textContent = (emp.nombre||'') + ' ' + (emp.apellido||'');
+  document.getElementById('trabBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-3)">Cargando...</div>';
 
-      try {
-        const r = await fetch('/documentos/por-empleado/' + id);
-        const d = await r.json();
-        const docs = d.success ? d.data : [];
-        const imssColor = emp?.imss_vigente === true ? 'var(--success)' : emp?.imss_vigente === false ? 'var(--danger)' : 'var(--text-3)';
-        const imssLabel = emp?.imss_vigente === true ? '✓ VIGENTE' : emp?.imss_vigente === false ? '✗ NO VIGENTE' : '—';
-        const estatusColor = emp?.estatus === 'activo' ? 'var(--success)' : emp?.estatus === 'vetado' ? 'var(--danger)' : 'var(--text-3)';
+  try {
+    const r = await fetch('/documentos/por-empleado/' + id);
+    const d = await r.json();
+    const docs = d.success ? d.data : [];
+    const imssColor = emp?.imss_vigente === true ? 'var(--success)' : emp?.imss_vigente === false ? 'var(--danger)' : 'var(--text-3)';
+    const imssLabel = emp?.imss_vigente === true ? '✓ VIGENTE' : emp?.imss_vigente === false ? '✗ NO VIGENTE' : '—';
+    const estatusColor = emp?.estatus === 'activo' ? 'var(--success)' : emp?.estatus === 'vetado' ? 'var(--danger)' : 'var(--text-3)';
+   
 
-        const botonesEstatus = ROL === 'seguridad_fisica' ? `
-          <div style="display:flex;gap:10px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
-            <button onclick="cambiarEstatus('activo')"
-              style="flex:1;padding:10px;background:var(--success-bg);border:1.5px solid var(--success);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
-              ✓ ACTIVAR TRABAJADOR
+      const botonesEstatus = ROL === 'seguridad_fisica' ? `
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;gap:10px">
+            ${emp?.estatus === 'activo' 
+              ? `<button onclick="cambiarEstatus('no_activo')" style="flex:1;padding:10px;background:rgba(245,158,11,0.1);border:1.5px solid var(--warning);color:var(--warning);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">⏸ DESACTIVAR</button>`
+              : `<button onclick="cambiarEstatus('activo')" style="flex:1;padding:10px;background:var(--success-bg);border:1.5px solid var(--success);color:var(--success);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">✓ ACTIVAR</button>`
+            }
+            <button onclick="cambiarEstatus('vetado')" style="flex:1;padding:10px;background:var(--danger-bg);border:1.5px solid var(--danger);color:var(--danger);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">✗ VETAR</button>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="detalle-field-label" style="min-width:140px">FECHA INDUCCIÓN</div>
+            <input type="date" id="inputFechaInduccion" 
+              value="${emp?.fecha_induccion ? emp.fecha_induccion.toString().substring(0,10) : ''}"
+              style="padding:8px 12px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px">
+            <button onclick="guardarFechaInduccion()"
+              style="padding:8px 16px;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
+              GUARDAR
             </button>
-            <button onclick="cambiarEstatus('vetado')"
-              style="flex:1;padding:10px;background:var(--danger-bg);border:1.5px solid var(--danger);color:var(--danger);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;cursor:pointer">
-              ✗ VETAR TRABAJADOR
+          </div>
+          <div>
+            <button onclick="liberarTrabajador()" style="
+              width:100%;padding:10px;
+              background:rgba(139,92,246,0.1);
+              border:1.5px solid #8b5cf6;
+              color:#8b5cf6;
+              font-family:'Barlow Condensed',sans-serif;
+              font-weight:700;font-size:13px;
+              letter-spacing:1px;cursor:pointer">
+              ✂ LIBERAR DE EMPRESA
             </button>
-          </div>` : '';
+          </div>
+        </div>` : '';
 
-        document.getElementById('trabBody').innerHTML = botonesEstatus +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">' +
-            '<div><div class="detalle-field-label">EMPRESA</div><div class="detalle-field-value">' + (emp?.empresa||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">CARGO</div><div class="detalle-field-value">' + (emp?.cargo||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">ÁREA</div><div class="detalle-field-value">' + (emp?.area||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">CURP</div><div class="detalle-field-value mono">' + (emp?.documento_identidad||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">IMSS</div><div class="detalle-field-value" style="color:' + imssColor + '">' + imssLabel + '</div></div>' +
-            '<div><div class="detalle-field-label">ESTATUS</div><div class="detalle-field-value" style="color:' + estatusColor + '">' + (emp?.estatus||'—').toUpperCase() + '</div></div>' +
-            '<div><div class="detalle-field-label">NSS</div><div class="detalle-field-value mono">' + (emp?.imss_nss||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">VIGENCIA IMSS</div><div class="detalle-field-value">' + (emp?.imss_fecha_vigencia||'—') + '</div></div>' +
-            '<div><div class="detalle-field-label">REGISTRO</div><div class="detalle-field-value">' + (emp?.creado_en ? new Date(emp.creado_en).toLocaleDateString('es-MX') : '—') + '</div></div>' +
-          '</div>' +
-          '<div style="font-family:Barlow Condensed,sans-serif;font-size:12px;letter-spacing:1px;color:var(--accent);margin-bottom:12px">DOCUMENTOS</div>' +
-          (!docs.length ? '<div style="color:var(--text-3);padding:20px;text-align:center">Sin documentos registrados.</div>' :
-            docs.map(doc => {
-              const badgeColor = doc.estado_validacion === 'aprobado' ? 'var(--success)' : doc.estado_validacion === 'rechazado' ? 'var(--danger)' : 'var(--warning)';
-              const esIMSS = doc.doc_type === 'IMSS';
-              const info = esIMSS
-                ? 'NSS: ' + (doc.extracted_json?.nss||'—') + ' | ' + (doc.extracted_json?.vigente ? '✓ VIGENTE' : '✗ NO VIGENTE') + ' | Hasta: ' + (doc.extracted_json?.fecha_vigencia||'—')
-                : 'CURP: ' + (doc.extracted_json?.curp||'—') + ' | ' + (doc.extracted_json?.nombre||'');
-              return '<div style="padding:12px;border:1px solid var(--border);margin-bottom:8px">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
-                  '<div style="display:flex;gap:8px;align-items:center">' +
-                    '<span style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:var(--text)">' + (doc.doc_type||'Procesando...') + '</span>' +
-                    '<span style="font-size:11px;padding:2px 8px;border:1px solid ' + badgeColor + ';color:' + badgeColor + '">' + (doc.estado_validacion||'').toUpperCase() + '</span>' +
-                  '</div>' +
-                  '<span style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + (doc.created_at ? new Date(doc.created_at).toLocaleDateString('es-MX') : '') + '</span>' +
+
+    document.getElementById('trabBody').innerHTML = botonesEstatus +
+      
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">' +
+      '<div><div class="detalle-field-label">NOMBRE</div><div class="detalle-field-value">' + (emp?.nombre||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">APELLIDO</div><div class="detalle-field-value">' + (emp?.apellido||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">NO. EMPLEADO</div><div class="detalle-field-value mono">' + (emp?.documento_identidad||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">NSS</div><div class="detalle-field-value mono">' + (emp?.imss_nss||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">ÁREA</div><div class="detalle-field-value">' + (emp?.area||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">CARGO</div><div class="detalle-field-value">' + (emp?.cargo||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">EMPRESA</div><div class="detalle-field-value">' + (emp?.empresa||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">REGISTRO PATRONAL</div><div class="detalle-field-value mono">' + (emp?.padron||'—') + '</div></div>' +
+      '<div><div class="detalle-field-label">ESTATUS</div><div class="detalle-field-value" style="color:' + estatusColor + '">' + (emp?.estatus||'—').toUpperCase() + '</div></div>' +
+      '<div><div class="detalle-field-label">FECHA INDUCCIÓN</div><div class="detalle-field-value">' + (emp?.fecha_induccion ? new Date(emp.fecha_induccion).toLocaleDateString('es-MX') : '—') + '</div></div>' +
+    '</div>' +
+      '<div style="font-family:Barlow Condensed,sans-serif;font-size:12px;letter-spacing:1px;color:var(--accent);margin-bottom:12px">DOCUMENTOS</div>' +
+      (!docs.length ? '<div style="color:var(--text-3);padding:20px;text-align:center">Sin documentos registrados.</div>' :
+        docs.map(doc => {
+         const badgeColor = doc.estado_validacion === 'aprobado' ? 'var(--success)' : doc.estado_validacion === 'rechazado' ? 'var(--danger)' : 'var(--warning)';
+         
+          const esIMSS = doc.doc_type === 'IMSS';
+            const info = esIMSS
+              ? ' '
+              : ' ' + '';
+                      
+          
+          
+            return '<div style="padding:12px;border:1px solid var(--border);margin-bottom:8px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+              '<div style="display:flex;gap:8px;align-items:center">' +
+                '<span style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:var(--text)">' + (doc.doc_type||'Procesando...') + '</span>' +
+             
                 '</div>' +
-                '<div style="font-size:11px;color:var(--text-2);font-family:Share Tech Mono,monospace;margin-bottom:8px">' + info + '</div>' +
-                (doc.image_base64 ? '<img src="data:' + doc.image_mime + ';base64,' + doc.image_base64 + '" style="max-width:100%;max-height:160px;object-fit:contain;border:1px solid var(--border);display:block">' : '') +
-              '</div>';
-            }).join('')
-          );
-      } catch(e) {
-        document.getElementById('trabBody').innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
-      }
-    }
+              '<span style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + (doc.created_at ? new Date(doc.created_at).toLocaleDateString('es-MX') : '') + '</span>' +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text-2);font-family:Share Tech Mono,monospace;margin-bottom:8px">' + info + '</div>' +
+            (doc.image_base64 ? '<img src="data:' + doc.image_mime + ';base64,' + doc.image_base64 + '" onclick="verImgDoc(this.src)" style="max-width:100%;max-height:160px;object-fit:contain;border:1px solid var(--border);display:block;cursor:pointer">' : '') +
+          '</div>';
+        }).join('')
+      ) +
+      '<div style="font-family:Barlow Condensed,sans-serif;font-size:12px;letter-spacing:1px;color:var(--accent);margin-bottom:12px;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">REGISTRO DE ACCESOS</div>' +
+      '<div id="accesos-loading" style="color:var(--text-3);font-size:13px;text-align:center;padding:10px">Cargando accesos...</div>' +
+      '<table class="detalle-table" id="accesos-table" style="display:none"><thead><tr><th>FECHA / HORA</th><th>MOVIMIENTO</th><th>SIMILITUD</th></tr></thead><tbody id="accesos-tbody"></tbody></table>';
+
+    // Cargar accesos del empleado
+    fetch('/facial/empleados/' + id + '/accesos')
+      .then(r => r.json())
+      .then(d => {
+        const loadingEl = document.getElementById('accesos-loading');
+        const tableEl = document.getElementById('accesos-table');
+        const tbodyEl = document.getElementById('accesos-tbody');
+        if (!d.success || !d.data.length) {
+          if (loadingEl) loadingEl.textContent = 'Sin registros de acceso.';
+          return;
+        }
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (tbodyEl) tbodyEl.innerHTML = d.data.map(a => {
+          const fecha = a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+          const esEntrada = a.tipo_movimiento === 'entrada';
+          const sim = a.similitud ? (parseFloat(a.similitud)*100).toFixed(1)+'%' : '—';
+          return '<tr>' +
+            '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + fecha + '</td>' +
+            '<td>' + (esEntrada ? '<span style="color:var(--accent);font-weight:700">↓ ENTRADA</span>' : '<span style="color:#ef4444;font-weight:700">↑ SALIDA</span>') + '</td>' +
+            '<td style="font-family:Share Tech Mono,monospace;color:var(--text-3)">' + sim + '</td>' +
+            '</tr>';
+        }).join('');
+        if (tableEl) tableEl.style.display = 'table';
+      })
+      .catch(() => {
+        const loadingEl = document.getElementById('accesos-loading');
+        if (loadingEl) loadingEl.textContent = 'Error al cargar accesos.';
+      });
+
+  } catch(e) {
+    document.getElementById('trabBody').innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
+  }
+}
 
     function cerrarModalTrabajador() {
       document.getElementById('modalTrabajador').classList.remove('open');
@@ -372,10 +538,10 @@
 
     async function cambiarEstatus(estatus) {
       const id = currentEmpleadoId;
-      if (!id) return;
+      if (!id || isNaN(id)) { alert('Error: no se identificó al trabajador'); return; }
       const emp = allPersonal.find(e => e.id === id);
-      const nombre = emp ? emp.nombre + ' ' + emp.apellido : 'este trabajador';
-      const label = estatus === 'activo' ? 'ACTIVAR' : 'VETAR';
+      const nombre = emp ? (emp.nombre||'') + ' ' + (emp.apellido||'') : 'este trabajador';
+      const label = estatus === 'activo' ? 'ACTIVAR' : estatus === 'no_activo' ? 'DESACTIVAR' : 'VETAR';
       if (!confirm('¿Confirmas ' + label + ' a ' + nombre + '?')) return;
       try {
         const r = await fetch('/facial/empleados/' + id + '/estatus', {
@@ -390,7 +556,7 @@
         cerrarModalTrabajador();
         const msg = document.createElement('div');
         msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--black);color:var(--accent);padding:14px 20px;font-family:Barlow Condensed,sans-serif;font-size:14px;letter-spacing:1px;z-index:9999;border:1px solid var(--accent)';
-        msg.textContent = estatus === 'activo' ? '✓ Trabajador ACTIVADO' : '✗ Trabajador VETADO';
+        msg.textContent = estatus === 'activo' ? '✓ Trabajador ACTIVADO' : estatus === 'vetado' ? '✗ Trabajador VETADO' : '⏸ Trabajador DESACTIVADO';
         document.body.appendChild(msg);
         setTimeout(() => msg.remove(), 3000);
       } catch(e) {
@@ -398,7 +564,684 @@
       }
     }
 
+
+    function verImgDoc(src) {
+  const prev = document.getElementById('imgDocOverlay');
+  if (prev) prev.remove();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'imgDocOverlay';
+
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <button onclick="document.getElementById('imgDocOverlay').remove()" style="
+      position:fixed;top:20px;right:20px;
+      width:36px;height:36px;
+      background:#f5a623;color:#000;
+      border:none;border-radius:50%;
+      font-size:18px;font-weight:700;
+      cursor:pointer;z-index:99999;
+      display:flex;align-items:center;justify-content:center;
+    ">✕</button>
+    <img src="${src}" onclick="document.getElementById('imgDocOverlay').remove()"
+     style="max-width:90%;max-height:90vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out">
+  `;
+  
+  document.body.appendChild(overlay);
+
+  // ESC handler — se registra UNA sola vez y se limpia solo
+  function escHandler(e) {
+    if (e.key === 'Escape') {
+      const el = document.getElementById('imgDocOverlay');
+      if (el) el.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  }
+  // Eliminar listener viejo si existe
+  if (window._imgEscHandler) {
+    document.removeEventListener('keydown', window._imgEscHandler);
+  }
+  window._imgEscHandler = escHandler;
+  document.addEventListener('keydown', escHandler);
+}
+
+
+
+
+
+    // ===================== ENROLAMIENTO =====================
+    function abrirModalEnrolar() { abrirFacialEnrolar(); }
+
+    async function abrirFacialEnrolar() {
+      document.getElementById('modalEnrolar').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      facialDescriptorEnrol = null;
+      enrolDuplicado = false;
+clearTimeout(_duplicadoTimeout);
+      enrolCredFile = null; enrolImssFile = null;
+      enrolCredProcesado = false; enrolImssProcesado = false;
+      enrolCredData = null; enrolImssData = null;
+
+      ['enrol-nombre','enrol-apellido','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-area','enrol-cargo'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      const credProc = document.getElementById('enrol-cred-proceso'); if(credProc) credProc.style.display='none';
+      const credRetry = document.getElementById('enrol-cred-retry'); if(credRetry) credRetry.style.display='none';
+      const credClear = document.getElementById('enrol-cred-clear'); if(credClear) credClear.style.display='none';
+      const credLabel = document.getElementById('enrol-cred-label'); if(credLabel) credLabel.textContent = 'Arrastra o haz clic para subir credencial';
+      const credDrop = document.getElementById('enrol-cred-drop'); if(credDrop) credDrop.style.borderColor = 'var(--border)';
+      const credInput = document.getElementById('enrol-cred-input'); if(credInput) credInput.value = '';
+      const saveStatus = document.getElementById('enrol-save-status'); if(saveStatus) saveStatus.style.display = 'none';
+      ['warn-foto','warn-cred'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display='flex'; });
+      const imssWarnEl = document.getElementById('warn-imss'); if(imssWarnEl) imssWarnEl.style.display='none';
+
+      if (window._userRol === 'contratista' && window._userEmpresa) {
+        document.getElementById('enrol-empresa').value = window._userEmpresa;
+      }
+
+      const statusEl = document.getElementById('enrol-status');
+      const capEl    = document.getElementById('enrol-cap-status');
+      statusEl.className = 'facial-status'; statusEl.textContent = '⏳ Iniciando cámara...';
+      capEl.className = 'facial-status error'; capEl.textContent = '❌ Rostro no capturado';
+      document.getElementById('btn-enrol-capturar').disabled = true;
+      document.getElementById('btn-enrol-guardar').disabled  = true;
+
+      if (!facialModelos) { facialModelos = await Facial.cargarModelos(); }
+      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas');
+      if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
+      Facial.iniciarDeteccion(
+        () => { statusEl.className = 'facial-status ok'; statusEl.textContent = '✅ Rostro detectado'; document.getElementById('btn-enrol-capturar').disabled = false; },
+        () => { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ Sin rostro detectado'; document.getElementById('btn-enrol-capturar').disabled = true; }
+      );
+    }
+
+    function cerrarFacialEnrolar() {
+      enrolCredFile = null; enrolImssFile = null;
+      enrolCredProcesado = false; enrolImssProcesado = false;
+      enrolCredData = null; enrolImssData = null;
+      const cc = document.getElementById('enrol-cred-clear'); if (cc) cc.style.display = 'none';
+      facialDescriptorEnrol = null;
+      Facial.detenerCamara();
+      document.getElementById('modalEnrolar').classList.remove('open');
+      document.body.style.overflow = '';
+      cargarPersonal();
+    }
+
+    async function capturarRostroEnrol() {
+      const capEl = document.getElementById('enrol-cap-status');
+      capEl.className = 'facial-status'; capEl.textContent = '⏳ Capturando...';
+      const descriptor = Facial.ultimoDescriptor || await Facial.obtenerDescriptor();
+      if (descriptor) {
+        facialDescriptorEnrol = descriptor;
+        capEl.className = 'facial-status ok'; capEl.textContent = `✅ Rostro capturado (${descriptor.length} valores)`;
+        const wf = document.getElementById('warn-foto'); if(wf) wf.style.display='none';
+        verificarBotonGuardar();
+      } else {
+        capEl.className = 'facial-status error'; capEl.textContent = '❌ No se detectó rostro — intenta de nuevo';
+      }
+    }
+
+
+
+
+    async function verificarDuplicado() {
+  const nss     = document.getElementById('enrol-nss')?.value?.trim() || '';
+  const empresa = document.getElementById('enrol-empresa')?.value?.trim() || '';
+
+  if (!nss) {
+    enrolDuplicado = false;
+    verificarBotonGuardar();
+    return;
+  }
+
+  try {
+    const res = await fetch('/facial/verificar-duplicado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nss, empresa })
+    });
+    const data = await res.json();
+    const procesoEl = document.getElementById('enrol-cred-proceso');
+
+    if (data.duplicado) {
+      enrolDuplicado = true;
+      if (procesoEl) {
+        procesoEl.style.display = 'block';
+        procesoEl.style.color = 'var(--danger)';
+        procesoEl.style.borderColor = 'var(--danger)';
+        procesoEl.innerHTML = `⚠️ ${data.mensaje}`;
+      }
+     } else {
+  enrolDuplicado = false;
+  if (procesoEl) {
+    const txt = procesoEl.innerHTML || '';
+    if (txt.includes('⚠️')) {  // limpia cualquier advertencia de duplicado
+      procesoEl.style.display = 'none';
+      procesoEl.innerHTML = '';
+    }
+  }
+}
+  } catch(e) {
+    console.warn('No se pudo verificar duplicado:', e);
+    enrolDuplicado = false;
+  }
+
+  verificarBotonGuardar();
+}
+
+function verificarDuplicadoDebounced() {
+  clearTimeout(_duplicadoTimeout);
+  _duplicadoTimeout = setTimeout(verificarDuplicado, 600);
+}
+
+
+function verificarDuplicadoDebounced() {
+  clearTimeout(_duplicadoTimeout);
+  _duplicadoTimeout = setTimeout(verificarDuplicado, 600);
+}
+
+
+
+
+   function verificarBotonGuardar() {
+  const tieneFoto = facialDescriptorEnrol !== null;
+  const tieneCred = enrolCredProcesado;
+  const fotoWarn = document.getElementById('warn-foto');
+  const credWarn = document.getElementById('warn-cred');
+  if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
+  if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
+
+  const procesoEl = document.getElementById('enrol-cred-proceso');
+  let nombreCoincide = true;
+
+  if (enrolCredData) {
+    const ext = enrolCredData.extracted || {};
+    const docType = enrolCredData.docType || '';
+    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim();
+
+    let nombreDoc = '', apellidoDoc = '';
+    if (docType === 'LICENCIA') {
+      const nc = (ext.nombre_conductor || '').trim();
+      nombreDoc   = nc;
+      apellidoDoc = '';
+    } else {
+      nombreDoc   = (ext.nombre || '').trim();
+      apellidoDoc = [ext.apellido_paterno||'', ext.apellido_materno||''].filter(Boolean).join(' ');
+    }
+
+    const nombreForm   = norm(document.getElementById('enrol-nombre')?.value?.trim() || '');
+    const apellidoForm = norm(document.getElementById('enrol-apellido')?.value?.trim() || '');
+
+    // Comparar nombre completo concatenado
+    const docCompleto  = norm([nombreDoc, apellidoDoc].filter(Boolean).join(' '));
+    const formCompleto = norm([nombreForm, apellidoForm].filter(Boolean).join(' '));
+
+    if (!nombreForm || !apellidoForm) {
+      nombreCoincide = false;
+    } else if (docCompleto !== formCompleto) {
+      nombreCoincide = false;
+      if (procesoEl) {
+        procesoEl.style.display = 'block';
+        procesoEl.style.color = 'var(--danger)';
+        procesoEl.style.borderColor = 'var(--danger)';
+        procesoEl.innerHTML = `❌ El nombre no coincide — Documento: "<strong>${docCompleto}</strong>" vs Formulario: "<strong>${formCompleto}</strong>"`;
+      }
+    } else {
+      nombreCoincide = true;
+      if (procesoEl && procesoEl.innerHTML.includes('no coincide')) {
+        procesoEl.style.color = 'var(--success)';
+        procesoEl.style.borderColor = 'var(--success)';
+        procesoEl.innerHTML = `✅ ${docType} válido — ${nombreDoc}${apellidoDoc ? ' ' + apellidoDoc : ''}`;
+      }
+    }
+  }
+
+  const btn = document.getElementById('btn-enrol-guardar');
+  if (!btn) return;
+  const listo = tieneFoto && tieneCred && nombreCoincide && !enrolDuplicado;
+  
+  btn.disabled = !listo;
+  btn.textContent = 'REGISTRAR PERSONAL'; // ← agrega esta línea
+  btn.style.opacity = '1';
+  btn.style.background = listo ? 'var(--success)' : 'var(--text-3)';
+  btn.style.color = listo ? '#fff' : '#999';
+  btn.style.cursor = listo ? 'pointer' : 'not-allowed';
+  btn.style.pointerEvents = listo ? 'auto' : 'none';
+}
+
+
+
+    
+    async function fileToBase64(file) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    }
+
+
+
+
+
+    async function comprimirImagenFrontend(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Máximo 1000px en cualquier dimensión
+        let w = img.width, h = img.height;
+        const MAX = 1000;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else       { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        // Calidad 0.7 — buen balance para documentos
+        resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+    function enrolArchivoSeleccionado(input, tipo) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { alert('Archivo demasiado grande (máx 10 MB)'); return; }
+      if (tipo === 'cred') {
+        enrolCredFile = file; enrolCredProcesado = false; enrolCredData = null;
+        document.getElementById('enrol-cred-label').textContent = '⏳ ' + file.name;
+        const cc = document.getElementById('enrol-cred-clear'); if (cc) cc.style.display = 'inline-block';
+      } else {
+        enrolImssFile = file; enrolImssProcesado = false; enrolImssData = null;
+        document.getElementById('enrol-imss-label').textContent = '⏳ ' + file.name;
+      }
+      verificarBotonGuardar();
+      procesarDocEnrol(file, tipo);
+    }
+
+    function enrolDropFile(event, tipo) {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      if (!file) return;
+      const input = document.getElementById(`enrol-${tipo}-input`);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      enrolArchivoSeleccionado(input, tipo);
+    }
+
+    function enrolLimpiarDoc(tipo) {
+      if (tipo === 'cred') {
+        enrolCredFile = null; enrolCredProcesado = false; enrolCredData = null;
+        document.getElementById('enrol-cred-proceso').style.display = 'none';
+        document.getElementById('enrol-cred-retry').style.display = 'none';
+        document.getElementById('enrol-cred-clear').style.display = 'none';
+        document.getElementById('enrol-cred-label').textContent = 'Arrastra o haz clic para subir un documento';
+        document.getElementById('enrol-cred-drop').style.borderColor = 'var(--border)';
+        document.getElementById('enrol-cred-input').value = '';
+      }
+      verificarBotonGuardar();
+    }
+
+    function enrolReintentarDoc(tipo) {
+      if (tipo === 'cred') {
+        enrolCredFile = null; enrolCredProcesado = false; enrolCredData = null;
+        document.getElementById('enrol-cred-proceso').style.display = 'none';
+        document.getElementById('enrol-cred-retry').style.display = 'none';
+        document.getElementById('enrol-cred-clear').style.display = 'none';
+        document.getElementById('enrol-cred-label').textContent = 'Arrastra o haz clic para subir credencial';
+        document.getElementById('enrol-cred-drop').style.borderColor = 'var(--border)';
+        document.getElementById('enrol-cred-input').value = '';
+        document.getElementById('enrol-cred-input').click();
+      } else {
+        enrolImssFile = null; enrolImssProcesado = false; enrolImssData = null;
+        
+        const imssProc = document.getElementById('enrol-imss-proceso'); if(imssProc) imssProc.style.display='none';
+        const imssRetry = document.getElementById('enrol-imss-retry'); if(imssRetry) imssRetry.style.display='none';
+
+        const imssLabel = document.getElementById('enrol-imss-label'); if(imssLabel) imssLabel.textContent = 'Arrastra o haz clic para subir vigencia IMSS';
+        const imssDrop = document.getElementById('enrol-imss-drop'); if(imssDrop) imssDrop.style.borderColor = '#3b82f6';
+        const imssInput = document.getElementById('enrol-imss-input'); if(imssInput) imssInput.value = '';
+        document.getElementById('enrol-imss-input').click();
+      }
+      verificarBotonGuardar();
+    }
+
+    async function procesarDocEnrol(file, tipo) {
+  const procesoEl = document.getElementById(`enrol-${tipo}-proceso`);
+  const retryEl   = document.getElementById(`enrol-${tipo}-retry`);
+  const dropEl    = document.getElementById(`enrol-${tipo}-drop`);
+  const labelEl   = document.getElementById(`enrol-${tipo}-label`);
+  const warnEl    = document.getElementById(`warn-${tipo}`);
+  procesoEl.style.display = 'block';
+  procesoEl.style.color   = 'var(--text-2)';
+  procesoEl.innerHTML     = '⏳ Comprimiendo imagen...';
+  retryEl.style.display   = 'none';
+
+  try {
+    let base64, mimeFinal = file.type;
+    if (file.type === 'application/pdf') {
+      procesoEl.innerHTML = '⏳ Convirtiendo PDF a imagen...';
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      mimeFinal = 'image/jpeg'; 
+    } else {
+      base64 = await comprimirImagenFrontend(file);
+      mimeFinal = 'image/jpeg';
+    }
+
+    procesoEl.innerHTML = '⏳ Enviando a procesamiento con IA...';
+    const endpoint = tipo === 'imss' ? '/documentos/procesar-imss' : '/documentos/procesar-doc';
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64, mime: mimeFinal, nombre: file.name, docType: 'AUTO' })
+    });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'Error de procesamiento');
+
+    if (tipo === 'cred') {
+      const ext = data.extracted || {};
+
+      // ── Detectar tipo de documento ──
+      let docType = (ext.tipo_documento || '').toUpperCase();
+      if (!docType) {
+        if (ext.clave_elector)                               docType = 'INE';
+        else if (ext.numero_pasaporte)                       docType = 'PASAPORTE';
+        else if (ext.numero_licencia || ext.nombre_conductor) docType = 'LICENCIA';
+        else                                                  docType = 'INE';
+      }
+
+      // ── Validar vigencia ──
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+
+      const bloquear = (msg) => {
+        procesoEl.innerHTML = msg;
+        procesoEl.style.color = 'var(--danger)';
+        dropEl.style.borderColor = 'var(--danger)';
+        retryEl.style.display = 'block';
+        enrolCredFile = null; enrolCredProcesado = false;
+        verificarBotonGuardar();
+      };
+
+      const parsearFecha = (fechaStr) => {
+        if (!fechaStr) return null;
+        const partes = String(fechaStr).split('/');
+        if (partes.length === 3) {
+          const f = new Date(`${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`);
+          return isNaN(f.getTime()) ? null : f;
+        }
+        const f = new Date(fechaStr);
+        return isNaN(f.getTime()) ? null : f;
+      };
+
+      if (docType === 'INE') {
+        if (!ext.vigencia) {
+          bloquear(`❌ INE — No se pudo leer la vigencia. Intenta con una imagen más clara.`);
+          return;
+        }
+        const anio = parseInt(String(ext.vigencia).replace(/\D/g, '').slice(-4));
+        if (!anio || anio < hoy.getFullYear()) {
+          bloquear(`❌ INE VENCIDA — Vigencia: ${ext.vigencia}. No se puede registrar con un documento vencido.`);
+          return;
+        }
+      }
+
+      if (docType === 'PASAPORTE') {
+        if (!ext.fecha_vencimiento) {
+          bloquear(`❌ PASAPORTE — No se pudo leer la fecha de vencimiento. Intenta con una imagen más clara.`);
+          return;
+        }
+        const fechaVenc = parsearFecha(ext.fecha_vencimiento);
+        if (!fechaVenc) {
+          bloquear(`❌ PASAPORTE — Fecha de vencimiento no válida: "${ext.fecha_vencimiento}". Intenta con otra imagen.`);
+          return;
+        }
+        if (fechaVenc < hoy) {
+          bloquear(`❌ PASAPORTE VENCIDO — Venció: ${ext.fecha_vencimiento}. No se puede registrar con un documento vencido.`);
+          return;
+        }
+      }
+
+        if (docType === 'LICENCIA') {
+          const fechaVencRaw = ext.fecha_vencimiento || ext.vigencia || null;
+          if (!fechaVencRaw) {
+              bloquear(`❌ LICENCIA — No se pudo leer la fecha de vencimiento. Sube una imagen más clara donde se vea la fecha.`);
+              return;
+            } else {
+          const fechaVenc = parsearFecha(fechaVencRaw);
+          if (!fechaVenc) {
+            procesoEl.innerHTML = `⚠️ LICENCIA — Fecha no reconocida: "${fechaVencRaw}". Verifica manualmente.`;
+            procesoEl.style.color = 'var(--warning)';
+            dropEl.style.borderColor = 'var(--warning)';
+          } else if (fechaVenc < hoy) {
+            bloquear(`❌ LICENCIA VENCIDA — Venció: ${fechaVencRaw}. No se puede registrar con un documento vencido.`);
+            return;
+          }
+        }
+      }
+
+      // ── Extraer nombre y apellido según tipo ──
+      let nombreDoc = '', apellidoDoc = '';
+      if (docType === 'LICENCIA') {
+        const nc = (ext.nombre_conductor || '').trim();
+        const partes = nc.split(' ').filter(Boolean);
+        nombreDoc   = partes[0] || '';
+        apellidoDoc = partes.slice(1).join(' ');
+      } else {
+        nombreDoc   = (ext.nombre || '').trim();
+        apellidoDoc = [ext.apellido_paterno || '', ext.apellido_materno || ''].filter(Boolean).join(' ');
+      }
+
+      // ── Todo OK — guardar y mostrar resumen ──
+      const docTypeFinal = (ext.tipo_documento || '').toUpperCase() ||
+        (ext.clave_elector ? 'INE' :
+         ext.numero_pasaporte ? 'PASAPORTE' :
+         (ext.numero_licencia || ext.nombre_conductor) ? 'LICENCIA' : 'INE');
+
+      enrolCredProcesado = true;
+      enrolCredData = { base64, mime: mimeFinal, nombre: file.name, extracted: ext, docType: docTypeFinal };
+
+      let resumen = '';
+      if (docType === 'INE')        resumen = `${ext.nombre || ''} ${ext.apellido_paterno || ''} ${ext.apellido_materno || ''} — Vigencia: ${ext.vigencia || '—'}`;
+      else if (docType === 'PASAPORTE') resumen = `${ext.nombre || ''} ${ext.apellido_paterno || ''} — Vence: ${ext.fecha_vencimiento || '—'}`;
+      else if (docType === 'LICENCIA')  resumen = `${ext.nombre_conductor || nombreDoc} — Vence: ${ext.fecha_vencimiento || 'no detectada'}`;
+      else resumen = `${nombreDoc} ${apellidoDoc}`.trim();
+
+      procesoEl.innerHTML = `✅ ${docType} válido — ${resumen.trim()}`;
+      procesoEl.style.color = 'var(--success)';
+      dropEl.style.borderColor = 'var(--success)';
+      labelEl.textContent = '✅ ' + file.name;
+      if (warnEl) warnEl.style.display = 'none';
+
+    } else {
+      // ── IMSS ──
+      enrolImssProcesado = true;
+      enrolImssData = { base64, mime: mimeFinal, nombre: file.name, extracted: data.extracted };
+      const vigente = data.extracted?.vigente;
+      const nombre  = data.extracted?.nombre_asegurado || '';
+      const fecha   = data.extracted?.fecha_vigencia || '';
+      procesoEl.innerHTML = vigente
+        ? `✅ VIGENTE — ${nombre} — Hasta: ${fecha}`
+        : `⚠️ NO VIGENTE — ${nombre}`;
+      procesoEl.style.color = vigente ? 'var(--success)' : 'var(--warning)';
+      dropEl.style.borderColor = vigente ? 'var(--success)' : 'var(--warning)';
+      labelEl.textContent = '✅ ' + file.name;
+      if (warnEl) warnEl.style.display = 'none';
+    }
+
+  } catch(e) {
+    procesoEl.innerHTML = `❌ Error: ${e.message}`;
+    procesoEl.style.color = 'var(--danger)';
+    dropEl.style.borderColor = 'var(--danger)';
+    retryEl.style.display = 'block';
+    if (tipo === 'cred') { enrolCredFile = null; enrolCredProcesado = false; }
+    else { enrolImssFile = null; enrolImssProcesado = false; }
+  }
+
+  verificarBotonGuardar();
+}
+
+
+    function normalizar(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+}
+
+
+
+
+async function guardarEnrolamiento() {
+  const nombre    = document.getElementById('enrol-nombre').value.trim();
+  const apellido  = document.getElementById('enrol-apellido').value.trim();
+  const nss       = document.getElementById('enrol-nss')?.value?.trim() || null;
+  const registro_patronal = document.getElementById('enrol-registro-patronal')?.value?.trim() || null;
+  const documento = document.getElementById('enrol-documento').value.trim();
+  const area      = document.getElementById('enrol-area').value.trim();
+  const cargo     = document.getElementById('enrol-cargo').value.trim();
+  const empresa   = document.getElementById('enrol-empresa')?.value.trim() || '';
+
+  // Sin validaciones aquí — verificarBotonGuardar ya garantizó que todo está bien
+
+  const btn      = document.getElementById('btn-enrol-guardar');
+  const statusEl = document.getElementById('enrol-save-status');
+  btn.disabled = true; btn.textContent = '⏳ Procesando...';
+  statusEl.style.display = 'block'; statusEl.textContent = 'Registrando empleado...';
+
+  try {
+    const rEmp = await Facial.enrolar({
+      nombre, apellido, email: null, documento, area, cargo, empresa,
+      descriptor: facialDescriptorEnrol,
+      estatus: 'no_activo',
+      imss_nss: nss || null,
+      registro_patronal
+    });
+    if (!rEmp.success) throw new Error(rEmp.error || 'Error al registrar empleado');
+    const empleadoId = rEmp.empleado.id;
+
+    statusEl.textContent = 'Guardando credencial...';
+    await fetch('/documentos/subir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archivos: [{ nombre: enrolCredData.nombre, mime: enrolCredData.mime, base64: enrolCredData.base64, tipo: 'DOC' }], empleado_id: empleadoId })
+    }).then(r => r.json());
+
+    if (enrolImssData) {
+      statusEl.textContent = 'Guardando vigencia IMSS...';
+      await fetch('/documentos/subir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archivos: [{ nombre: enrolImssData.nombre, mime: enrolImssData.mime, base64: enrolImssData.base64, tipo: 'IMSS' }], empleado_id: empleadoId })
+      }).then(r => r.json());
+    }
+
+    statusEl.textContent = '✅ Personal registrado con estatus NO ACTIVO';
+    statusEl.style.color = 'var(--success)';
+    setTimeout(() => { cerrarFacialEnrolar(); }, 1500);
+
+  } catch(e) {
+     statusEl.textContent = '❌ Error: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+    btn.disabled = false;
+    btn.textContent = 'REGISTRAR PERSONAL'; // ← esta línea falta
+
+  }
+}
+
+
+
+
+
+
+
+
+
+    async function guardarFechaInduccion() {
+  const id = currentEmpleadoId;
+  const fecha = document.getElementById('inputFechaInduccion').value;
+  if (!id) return;
+  try {
+    const r = await fetch('/facial/empleados/' + id + '/fecha-induccion', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha_induccion: fecha || null })
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error);
+    const emp = allPersonal.find(e => e.id === id);
+    if (emp) emp.fecha_induccion = fecha || null;
+    const msg = document.createElement('div');
+    msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--black);color:var(--accent);padding:14px 20px;font-family:Barlow Condensed,sans-serif;font-size:14px;letter-spacing:1px;z-index:9999;border:1px solid var(--accent)';
+    msg.textContent = '✓ Fecha de inducción guardada';
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+
+
+async function liberarTrabajador() {
+  const id = currentEmpleadoId;
+  if (!id) return;
+
+  const emp = allPersonal.find(e => e.id === id);
+  const nombre = emp ? `${emp.nombre} ${emp.apellido}` : 'este trabajador';
+
+  if (!confirm(
+    `¿Confirmas LIBERAR a ${nombre}?\n\n` +
+    `Esto borrará su registro facial y lo desvinculará de ${emp?.empresa || 'la empresa'}.\n` +
+    `Su historial de accesos se conservará.\n\n` +
+    `Para volver a trabajar deberá ser re-enrolado desde cero.`
+  )) return;
+
+  try {
+    const r = await fetch(`/facial/empleados/${id}/liberar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'Error');
+
+    cerrarModalTrabajador();
+    await cargarPersonal();
+
+    const msg = document.createElement('div');
+    msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--black);color:#8b5cf6;padding:14px 20px;font-family:Barlow Condensed,sans-serif;font-size:14px;letter-spacing:1px;z-index:9999;border:1px solid #8b5cf6';
+    msg.textContent = `✂ ${nombre} liberado — puede re-enrolarse en otra empresa`;
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 4000);
+
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+
+
+
     cargarPersonal();
+
+
+
   </script>
+
 </body>
 </html>

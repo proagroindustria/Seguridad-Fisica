@@ -17,22 +17,31 @@ async function comprimirBase64(base64, mime) {
   if (mime === 'application/pdf') return { base64, mime };
   try {
     const buffer  = Buffer.from(base64, 'base64');
-    const MAX     = 1200 * 1024; // 1.2 MB
-    let quality   = 85;
-    const maxDim  = mime === 'image/png' ? 2000 : 1600;
+    const MAX     = 800 * 1024; // 800 KB — bien por debajo del límite de nginx
+    let quality   = 80;
+    const maxDim  = 1200; // reducir dimensión máxima
 
     let result = await sharp(buffer)
       .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality, chromaSubsampling: '4:4:4' })
+      .jpeg({ quality, chromaSubsampling: '4:2:0' })
       .toBuffer();
 
-    while (result.length > MAX && quality >= 55) {
-      quality -= 8;
+    while (result.length > MAX && quality >= 40) {
+      quality -= 10;
       result = await sharp(buffer)
         .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality })
         .toBuffer();
     }
+
+    // Si sigue siendo grande, reducir dimensión también
+    if (result.length > MAX) {
+      result = await sharp(buffer)
+        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 50 })
+        .toBuffer();
+    }
+
     console.log(`[COMPRESS] ${(buffer.length/1024).toFixed(0)} KB → ${(result.length/1024).toFixed(0)} KB (q${quality})`);
     return { base64: result.toString('base64'), mime: 'image/jpeg' };
   } catch(e) {
@@ -112,16 +121,17 @@ async function llamarIMSS(request_id, empresa, base64Image, mimeType) {
 }
 
 // Llamar n8n y esperar respuesta con datos extraídos
-async function llamarN8N(request_id, empresa, base64Image, mimeType) {
+async function llamarN8N(request_id, empresa, base64Image, mimeType, docType) {
   const webhookUrl = process.env.N8N_DOCUMENTOS_URL;
   if (!webhookUrl) return null;
 
-  console.log('[N8N] Llamando webhook:', webhookUrl);
+  const tipoDoc = docType || 'INE';
+  console.log('[N8N] Llamando webhook:', webhookUrl, '| docType:', tipoDoc);
   console.log('[N8N] requestId:', request_id, '| empresa:', empresa, '| base64 length:', base64Image?.length);
 
   try {
     const response = await axios.post(webhookUrl, {
-      docType:    'AUTO',
+      docType:    tipoDoc,
       requestId:  request_id,
       empresa,
       mimeType:   mimeType || 'image/jpeg',
@@ -132,7 +142,7 @@ async function llamarN8N(request_id, empresa, base64Image, mimeType) {
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
     });
-    console.log('[N8N] Respuesta recibida:', JSON.stringify(response.data).slice(0, 200));
+    console.log('[N8N] Respuesta:', JSON.stringify(response.data).slice(0, 200));
     return response.data;
   } catch(e) {
     console.error('[N8N] Error:', e.response?.data || e.message);
@@ -196,17 +206,21 @@ router.post('/subir', requireAuth, requireContratista, async (req, res) => {
           extracted = null;
         }
       } else {
-        extracted = await llamarN8N(request_id, empresa, b64c, mimec);
+        extracted = await llamarN8N(request_id, empresa, b64c, mimec, arch.tipo || 'INE');
       }
 
       if (extracted && !extracted.error) {
         // Detectar tipo de documento
-        const docType = extracted.tipo_documento ||
-          (extracted.nss ? 'IMSS' :
-           extracted.clave_elector ? 'INE' :
-           extracted.num_acta ? 'ACTA' :
-           extracted.numero_pasaporte ? 'PASAPORTE' :
-           extracted.curp && Object.keys(extracted).length < 8 ? 'CURP' : 'INE');
+           const docType = extracted.tipo_documento ||
+            (extracted.nss ? 'IMSS' :
+            extracted.clave_elector ? 'INE' :
+            extracted.num_acta ? 'ACTA' :
+            extracted.numero_pasaporte ? 'PASAPORTE' :
+            (extracted.licencia || extracted.numero_licencia || extracted.tipo_licencia) ? 'LICENCIA' :
+            extracted.curp && Object.keys(extracted).length < 8 ? 'CURP' : 'INE');
+
+
+
 
         await poolDoc.query(
           `UPDATE documentos SET extracted_json=$1, doc_type=$2 WHERE id=$3`,
@@ -316,6 +330,7 @@ router.post('/subir', requireAuth, requireContratista, async (req, res) => {
   res.json({ success: true, data: resultados });
 });
 
+
 // ─── GET /documentos/mis-documentos ──────────────
 router.get('/mis-documentos', requireAuth, requireContratista, async (req, res) => {
   const empresa = req.session.user.nombre_completo;
@@ -332,6 +347,7 @@ router.get('/mis-documentos', requireAuth, requireContratista, async (req, res) 
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
 
 // ─── GET /documentos/:id ──────────────────────────
 // ─── GET /documentos/por-empleado/:id ────────────
@@ -490,15 +506,47 @@ router.put('/:id/validar', requireAuth, requireSeguridad, async (req, res) => {
 
 // ─── POST /documentos/procesar-doc ── Procesa credencial con IA sin guardar
 router.post('/procesar-doc', requireAuth, async (req, res) => {
-  const { base64, mime, nombre } = req.body;
+  const { base64, mime, nombre, docType } = req.body;
   if (!base64) return res.status(400).json({ success: false, error: 'Archivo requerido' });
+
+  const tipoDoc = docType || 'INE';
+  console.log(`[PROCESAR-DOC] docType="${tipoDoc}" | mime="${mime}" | size=${Math.round(base64.length * 3/4 / 1024)} KB`);
+
   try {
     const { base64: b64c, mime: mimec } = await comprimirBase64(base64, mime);
-    const extracted = await llamarN8N('preview-' + Date.now(), req.session.user.nombre_completo, b64c, mimec);
-    if (!extracted || extracted.error) throw new Error(extracted?.error || 'Error de extracción');
+
+    // Reintentar hasta 3 veces si n8n falla
+    let extracted = null;
+    let intentos  = 0;
+    const MAX_INTENTOS = 3;
+
+    while (intentos < MAX_INTENTOS) {
+      intentos++;
+      console.log(`[PROCESAR-DOC] Intento ${intentos}/${MAX_INTENTOS} | docType=${tipoDoc}`);
+
+      const resultado = await llamarN8N('preview-' + Date.now(), req.session.user.nombre_completo, b64c, mimec, tipoDoc);
+
+      if (!resultado || resultado.ok === false) {
+        console.warn(`[PROCESAR-DOC] Intento ${intentos} falló:`, resultado?.error || 'sin respuesta');
+        if (intentos < MAX_INTENTOS) {
+          await new Promise(r => setTimeout(r, 1500 * intentos));
+          continue;
+        }
+        return res.json({ success: false, n8n_no_disponible: true, error: 'Servicio de validación no disponible. El documento se revisará manualmente.' });
+      }
+
+      // n8n responde { ok: true, extracted: {...} } o directamente el objeto extraído
+      extracted = resultado.extracted || resultado;
+      break;
+    }
+
+    if (!extracted) return res.json({ success: false, n8n_no_disponible: true, error: 'No se pudo extraer información del documento.' });
+
     res.json({ success: true, extracted });
   } catch(e) {
-    res.status(500).json({ success: false, error: e.message });
+    console.error('[PROCESAR-DOC] Error final:', e.message);
+    // Devolver 200 con success:false para no generar error rojo en la consola del navegador
+    res.json({ success: false, error: e.message });
   }
 });
 
@@ -525,5 +573,36 @@ router.post('/procesar-imss', requireAuth, async (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+
+// ─── POST /documentos/procesar-tarjeta ──
+router.post('/procesar-tarjeta', requireAuth, async (req, res) => {
+  const { base64, mime, nombre } = req.body;
+  if (!base64) return res.status(400).json({ success: false, error: 'Archivo requerido' });
+  try {
+    const webhookUrl = process.env.N8N_TARJETA_URL;
+    if (!webhookUrl) throw new Error('N8N_TARJETA_URL no configurado');
+    const { base64: b64c, mime: mimec } = await comprimirBase64(base64, mime);
+    let resultado = null;
+    for (let i = 1; i <= 3; i++) {
+      try {
+        const r = await axios.post(webhookUrl, {
+          requestId: 'tarjeta-' + Date.now(),
+          mimeType: mimec,
+          base64File: b64c
+        }, { headers: { 'Content-Type': 'application/json' }, timeout: 60000, maxBodyLength: Infinity });
+        if (r.data && !r.data.error) { resultado = r.data; break; }
+      } catch(e) {
+        console.warn(`[TARJETA] Intento ${i} falló:`, e.message);
+        if (i < 3) await new Promise(r => setTimeout(r, 1500 * i));
+      }
+    }
+    if (!resultado) throw new Error('No se pudo procesar la tarjeta de circulación');
+    res.json({ success: true, extracted: resultado });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 
 module.exports = router;

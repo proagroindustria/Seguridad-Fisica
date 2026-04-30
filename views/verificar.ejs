@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/css/dashboard.css">
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script src="/js/facial.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <style>
     .cam-container {
       position: relative;
@@ -52,6 +53,90 @@
       from { opacity:0; transform: translateY(10px); }
       to   { opacity:1; transform: translateY(0); }
     }
+
+    /* ── Panel de acceso denegado con motivo ─────────── */
+    @keyframes denegadoIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    #panel-denegado {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.82);
+      align-items: center;
+      justify-content: center;
+    }
+    #panel-denegado.visible {
+      display: flex;
+    }
+    .denegado-card {
+      background: #fff;
+      width: min(460px, 92vw);
+      border-radius: 4px;
+      overflow: hidden;
+      animation: denegadoIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .denegado-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 22px 24px 18px;
+    }
+    .denegado-header.color-danger  { border-left: 5px solid #e24b4a; }
+    .denegado-header.color-warning { border-left: 5px solid #ef9f27; }
+    .denegado-icono {
+      font-size: 36px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .denegado-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .denegado-nombre {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #111;
+      letter-spacing: 0.5px;
+      margin: 0;
+    }
+    .denegado-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 2px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+    .denegado-badge.danger  { background: #e24b4a; color: #fff; }
+    .denegado-badge.warning { background: #ef9f27; color: #fff; }
+    .denegado-motivo {
+      padding: 14px 24px 20px;
+      border-top: 1px solid #eee;
+    }
+    .denegado-motivo p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .denegado-motivo.color-danger  p { color: #7a1f1f; }
+    .denegado-motivo.color-warning p { color: #5a3200; }
+    .denegado-footer {
+      padding: 10px 24px 16px;
+      text-align: center;
+    }
+    .denegado-footer span {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #aaa;
+    }
   </style>
 </head>
 <body>
@@ -70,30 +155,21 @@
       <div class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></div>
       <div class="user-info">
         <span class="user-name"><%= user.nombre_completo %></span>
-        <span class="user-role-badge role-seguridad_fisica">SEG. FÍSICA</span>
+        <span class="user-role-badge role-seguridad_fisica">VIG. FÍSICA</span>
       </div>
     </div>
     <nav class="sidebar-nav">
       <p class="nav-section-label">NAVEGACIÓN</p>
-      <a href="/dashboard" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
-        <span>Solicitudes</span>
-      </a>
-      <a href="/personal" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Trabajadores Contratistas</span>
-      </a>
       <a href="/verificar" class="nav-item active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M3 20c0-4 4-7 9-7s9 3 9 7"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M3 20c0-4 4-7 9-7s9 3 9 7"/>
+        </svg>
         <span>Registro de Asistencia</span>
-      </a>
-      <a href="/historial" class="nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-        <span>Registro de Incidencias</span>
       </a>
     </nav>
     <div class="sidebar-footer">
-      <a href="/logout" class="nav-item nav-logout">
+      <a href="/logout-asistencia" class="nav-item nav-logout">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         <span>Cerrar Sesión</span>
       </a>
@@ -122,32 +198,34 @@
     <div class="page-content" style="align-items:center">
 
       <div style="max-width:560px;width:100%;margin:0 auto">
-        <p class="section-eyebrow">SEGURIDAD FÍSICA</p>
+        <p class="section-eyebrow">VIGILANCIA FÍSICA</p>
         <h1 class="section-title" style="margin-bottom:20px">Registro de Asistencia</h1>
 
-        <!-- Status -->
         <div id="verif-status" style="padding:10px 16px;border:1px solid var(--border);background:var(--bg-3);font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-2);text-align:center;margin-bottom:12px">
           ⏳ Iniciando cámara...
         </div>
 
-        <!-- Cámara -->
         <div class="cam-container">
           <video id="verif-video" autoplay muted playsinline></video>
           <canvas id="verif-canvas"></canvas>
         </div>
 
-        <!-- Info automático -->
         <div style="text-align:center;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-3);padding:8px 0">
           El sistema detecta ENTRADA / SALIDA automáticamente
         </div>
 
-        <!-- Botón verificar -->
         <button id="btn-verificar" onclick="verificarRostro()" disabled
           style="width:100%;padding:14px;background:var(--black);color:var(--accent);border:2px solid var(--accent);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:2px;cursor:pointer;transition:all 0.2s;margin-top:4px">
           VERIFICAR
         </button>
+        <button id="btn-qr" onclick="activarModoQR()"
+          style="width:100%;padding:14px;background:transparent;color:var(--text-2);border:2px solid var(--border);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:2px;cursor:pointer;transition:all 0.2s;margin-top:8px">
+          📱 ESCANEAR QR
+        </button>
+        <div id="qr-scan-status" style="display:none;text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);padding:8px 0">
+          📱 Apunta el QR a la cámara...
+        </div>
 
-        <!-- Resultado -->
         <div id="verif-result" class="resultado-card">
           <div id="res-mov" style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;letter-spacing:1px;margin-bottom:8px"></div>
           <div id="res-nombre" style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:4px"></div>
@@ -159,12 +237,72 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- PANEL DE ACCESO DENEGADO CON MOTIVO             -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="panel-denegado" onclick="cerrarPanelDenegado()">
+    <div class="denegado-card" onclick="event.stopPropagation()">
+      <div class="denegado-header color-danger" id="denegado-header">
+        <div class="denegado-icono" id="denegado-icono">🚫</div>
+        <div class="denegado-info">
+          <p class="denegado-nombre" id="denegado-nombre">—</p>
+          <span class="denegado-badge danger" id="denegado-badge">Acceso denegado</span>
+        </div>
+      </div>
+      <div class="denegado-motivo color-danger" id="denegado-motivo">
+        <p id="denegado-detalle">—</p>
+      </div>
+      <div class="denegado-footer">
+        <span>Toca fuera para cerrar · se cierra automáticamente</span>
+      </div>
+    </div>
+  </div>
+
   <script>
     function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarOverlay').classList.add('open'); }
     function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
 
+    // ═══════════════════════════════════════════════
+    // PANEL DENEGADO
+    // ═══════════════════════════════════════════════
+    const RAZON_CONFIG = {
+      VETADO:            { icono: '🚫', titulo: 'Acceso vetado',       color: 'danger'  },
+      INACTIVO:          { icono: '⛔', titulo: 'Trabajador inactivo', color: 'danger'  },
+      SIN_INDUCCION:     { icono: '📋', titulo: 'Sin inducción',       color: 'warning' },
+      INDUCCION_VENCIDA: { icono: '⏰', titulo: 'Inducción vencida',   color: 'warning' },
+      SIN_PERMISO:       { icono: '📄', titulo: 'Sin permiso vigente', color: 'warning' },
+      NO_ENCONTRADO:     { icono: '❓', titulo: 'No encontrado',       color: 'danger'  },
+    };
+
+    let panelDenegadoTimer = null;
+
+    function mostrarPanelDenegado({ nombre, razon, detalle }) {
+      const cfg = RAZON_CONFIG[razon] || { icono: '⛔', titulo: 'Acceso denegado', color: 'danger' };
+
+      document.getElementById('denegado-icono').textContent   = cfg.icono;
+      document.getElementById('denegado-nombre').textContent  = nombre  || 'Trabajador';
+      document.getElementById('denegado-badge').textContent   = cfg.titulo;
+      document.getElementById('denegado-detalle').textContent = detalle || 'Acceso no permitido.';
+
+      document.getElementById('denegado-header').className = 'denegado-header color-' + cfg.color;
+      document.getElementById('denegado-badge').className  = 'denegado-badge ' + cfg.color;
+      document.getElementById('denegado-motivo').className = 'denegado-motivo color-' + cfg.color;
+
+      document.getElementById('panel-denegado').classList.add('visible');
+
+      if (panelDenegadoTimer) clearTimeout(panelDenegadoTimer);
+      panelDenegadoTimer = setTimeout(cerrarPanelDenegado, 7000);
+    }
+
+    function cerrarPanelDenegado() {
+      document.getElementById('panel-denegado').classList.remove('visible');
+      if (panelDenegadoTimer) clearTimeout(panelDenegadoTimer);
+    }
+
+    // ═══════════════════════════════════════════════
+    // VERIFICACIÓN FACIAL
+    // ═══════════════════════════════════════════════
     let facialModelos = null;
-    let facialDescriptorVerif = null;
 
     async function iniciarVerificacion() {
       const statusEl = document.getElementById('verif-status');
@@ -178,7 +316,6 @@
       }
       Facial.iniciarDeteccion(
         () => {
-          // El descriptor se guarda en Facial.ultimoDescriptor
           statusEl.style.color = 'var(--success)';
           statusEl.style.borderColor = 'var(--success)';
           statusEl.style.background = 'var(--success-bg)';
@@ -202,7 +339,6 @@
     }
 
     async function verificarRostro() {
-      // Capturar descriptor en este momento
       const descriptor = Facial.ultimoDescriptor;
       if (!descriptor) {
         mostrarNotificacion('❌', 'Sin rostro detectado', '#dc2626');
@@ -211,43 +347,53 @@
       const btn = document.getElementById('btn-verificar');
       btn.textContent = '⏳ VERIFICANDO...';
       btn.disabled = true;
-      const r = await Facial.verificar(descriptor);
-      console.log('Resultado:', r);
-      const resultEl  = document.getElementById('verif-result');
-      const movEl     = document.getElementById('res-mov');
-      const nombreEl  = document.getElementById('res-nombre');
-      const infoEl    = document.getElementById('res-info');
-      const solEl     = document.getElementById('res-solicitud');
+
+      let r;
+      try {
+        r = await Facial.verificar(descriptor);
+      } catch(e) {
+        mostrarNotificacion('❌', 'Error de conexión', '#dc2626');
+        btn.textContent = 'VERIFICAR';
+        btn.disabled = false;
+        return;
+      }
+
+      console.log('Resultado verificar:', r);
+
+      const resultEl = document.getElementById('verif-result');
+      const movEl    = document.getElementById('res-mov');
+      const nombreEl = document.getElementById('res-nombre');
+      const infoEl   = document.getElementById('res-info');
+      const solEl    = document.getElementById('res-solicitud');
 
       if (r.acceso === 'permitido') {
+        // ACCESO PERMITIDO
         const esEntrada = r.tipo_movimiento === 'entrada';
         const color = esEntrada ? '#16a34a' : '#dc2626';
-        const icono = esEntrada ? '↓' : '↑';
-        const mov   = esEntrada ? 'ENTRADA' : 'SALIDA';
-        console.log('RESULTADO:', r);
-        console.log('Mostrando notificacion:', icono, mov, r.empleado.nombre);
-        mostrarNotificacion(icono + ' ' + mov, r.empleado.nombre + ' ' + r.empleado.apellido, color);
-        console.log('Overlay creado:', document.getElementById('notif-overlay'));
-        resultEl.style.display = 'block';
+        const icono = esEntrada ? '🟢' : '🔴';
+        const mov   = esEntrada ? 'ENTRADA REGISTRADA. CUÍDATE, TU FAMILIA TE ESPERA' : 'SALIDA REGISTRADA. HASTA PRONTO';
+
+        mostrarNotificacion(icono, mov, color);
+
+        resultEl.className = 'resultado-card permitido';
         resultEl.style.borderColor = color;
-        resultEl.style.background = esEntrada ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)';
-        movEl.style.color   = color;
-        movEl.textContent   = icono + ' ' + mov;
+        movEl.style.color    = color;
+        movEl.textContent    = icono + ' ' + mov;
         nombreEl.textContent = r.empleado.nombre + ' ' + r.empleado.apellido;
-        infoEl.textContent  = (r.empleado.empresa||'') + (r.empleado.area ? ' · ' + r.empleado.area : '') + (r.hora ? ' · ' + r.hora : '');
+        infoEl.textContent   = (r.empleado.empresa||'') + (r.empleado.area ? ' · ' + r.empleado.area : '') + (r.hora ? ' · ' + r.hora : '');
         solEl.innerHTML = r.solicitud
           ? '<span style="color:#16a34a">✓ Solicitud: ' + r.solicitud.folio + ' — ' + r.solicitud.empresa + '</span>'
           : '<span style="color:#d97706">⚠️ Sin solicitud activa hoy</span>';
+
+      } else if (r.acceso_denegado) {
+        // ACCESO DENEGADO POR REGLA: vetado / inactivo / sin inducción / inducción vencida / sin permiso
+        mostrarPanelDenegado({ nombre: r.nombre, razon: r.razon, detalle: r.detalle });
+        resultEl.style.display = 'none';
+
       } else {
-        mostrarNotificacion('❌', 'Rostro no reconocido', '#dc2626');
-        resultEl.style.display = 'block';
-        resultEl.style.borderColor = '#dc2626';
-        resultEl.style.background = 'rgba(220,38,38,0.08)';
-        movEl.style.color = '#dc2626';
-        movEl.textContent = '❌ ACCESO DENEGADO';
-        nombreEl.textContent = 'Rostro no reconocido';
-        infoEl.textContent = '';
-        solEl.textContent = '';
+        // ROSTRO NO RECONOCIDO
+        mostrarNotificacion('❌', r.mensaje || 'Rostro no reconocido', '#dc2626');
+        resultEl.style.display = 'none';
       }
 
       btn.textContent = 'VERIFICAR';
@@ -255,7 +401,6 @@
     }
 
     function mostrarNotificacion(icono, texto, color) {
-      // Eliminar notificación anterior
       const prev = document.getElementById('notif-overlay');
       if (prev) prev.remove();
 
@@ -277,15 +422,138 @@
           animation: popIn 0.3s cubic-bezier(0.16,1,0.3,1);
         ">
           <div style="font-size:72px;line-height:1;margin-bottom:16px;color:${color}">${icono}</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;letter-spacing:2px;color:${color};margin-bottom:8px">${icono.includes('↓') ? 'ENTRADA' : icono.includes('↑') ? 'SALIDA' : 'DENEGADO'}</div>
-          <div style="font-size:18px;font-weight:500;color:#111;margin-bottom:6px">${texto}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;letter-spacing:2px;color:${color};margin-bottom:8px">
+            ${texto}
+          </div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#888;margin-top:16px">Toca para cerrar</div>
         </div>
       `;
       overlay.onclick = () => overlay.remove();
       document.body.appendChild(overlay);
-      // Auto-cerrar después de 4 segundos
       setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 4000);
+    }
+
+    // ═══════════════════════════════════════════════
+    // ESCANER QR
+    // ═══════════════════════════════════════════════
+    let qrScanInterval = null;
+    let modoQR = false;
+
+    function activarModoQR() {
+      modoQR = true;
+      const statusEl = document.getElementById('verif-status');
+      const qrStatus = document.getElementById('qr-scan-status');
+      const btnVerif = document.getElementById('btn-verificar');
+      const btnQR    = document.getElementById('btn-qr');
+
+      statusEl.style.color = 'var(--accent)';
+      statusEl.style.borderColor = 'var(--accent)';
+      statusEl.style.background = 'var(--bg-3)';
+      statusEl.textContent = '📱 Modo QR activo — apunta el código a la cámara';
+      if (qrStatus) qrStatus.style.display = 'block';
+      if (btnVerif) btnVerif.style.display = 'none';
+      if (btnQR) { btnQR.textContent = '📷 VOLVER A ROSTRO'; btnQR.onclick = desactivarModoQR; }
+
+      if (Facial.detectionInterval) { clearInterval(Facial.detectionInterval); Facial.detectionInterval = null; }
+      const verifCanvas = document.getElementById('verif-canvas');
+      if (verifCanvas) {
+        verifCanvas.getContext('2d').clearRect(0, 0, verifCanvas.width, verifCanvas.height);
+      }
+
+      const video = document.getElementById('verif-video');
+      let qrCanvas = document.getElementById('qr-hidden-canvas');
+      if (!qrCanvas) {
+        qrCanvas = document.createElement('canvas');
+        qrCanvas.id = 'qr-hidden-canvas';
+        qrCanvas.style.display = 'none';
+        document.body.appendChild(qrCanvas);
+      }
+      const ctx = qrCanvas.getContext('2d', { willReadFrequently: true });
+
+      qrScanInterval = setInterval(async () => {
+        if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+        qrCanvas.width  = video.videoWidth;
+        qrCanvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
+        const imageData = ctx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code) {
+          clearInterval(qrScanInterval);
+          qrScanInterval = null;
+          if (qrStatus) qrStatus.textContent = '⏳ QR detectado — verificando...';
+          await procesarQRDetectado(code.data);
+        }
+      }, 200);
+    }
+
+    function desactivarModoQR() {
+      modoQR = false;
+      if (qrScanInterval) { clearInterval(qrScanInterval); qrScanInterval = null; }
+      const btnVerif = document.getElementById('btn-verificar');
+      const btnQR    = document.getElementById('btn-qr');
+      const qrStatus = document.getElementById('qr-scan-status');
+      if (qrStatus) qrStatus.style.display = 'none';
+      if (btnVerif) btnVerif.style.display = 'block';
+      if (btnQR) { btnQR.textContent = '📱 ESCANEAR QR'; btnQR.onclick = activarModoQR; }
+      iniciarVerificacion();
+    }
+
+    async function procesarQRDetectado(data) {
+      const qrStatus = document.getElementById('qr-scan-status');
+      try {
+        const r = await Facial.verificarQR(data);
+        console.log('Resultado QR:', r);
+
+        const resultEl = document.getElementById('verif-result');
+        const movEl    = document.getElementById('res-mov');
+        const nombreEl = document.getElementById('res-nombre');
+        const infoEl   = document.getElementById('res-info');
+        const solEl    = document.getElementById('res-solicitud');
+
+        if (r.acceso === 'permitido') {
+          // ACCESO PERMITIDO QR
+          const esEntrada = r.tipo_movimiento === 'entrada';
+          const color = esEntrada ? '#16a34a' : '#dc2626';
+          const icono = esEntrada ? '🟢' : '🔴';
+          const mov   = esEntrada ? 'ENTRADA REGISTRADA' : 'SALIDA REGISTRADA';
+
+          mostrarNotificacion(icono, mov, color);
+
+          resultEl.className = 'resultado-card permitido';
+          resultEl.style.borderColor = color;
+          movEl.style.color    = color;
+          movEl.textContent    = icono + ' ' + mov;
+          nombreEl.textContent = r.empleado.nombre + ' ' + r.empleado.apellido;
+          infoEl.textContent   = (r.empleado.empresa||'') + (r.empleado.area ? ' · ' + r.empleado.area : '') + (r.hora ? ' · ' + r.hora : '');
+          solEl.innerHTML = r.solicitud
+            ? '<span style="color:#16a34a">✓ Solicitud: ' + r.solicitud.folio + '</span>'
+            : '<span style="color:#d97706">⚠️ Sin solicitud activa hoy</span>';
+
+        } else if (r.acceso_denegado) {
+          // ACCESO DENEGADO POR REGLA QR
+          mostrarPanelDenegado({ nombre: r.nombre, razon: r.razon, detalle: r.detalle });
+          resultEl.style.display = 'none';
+
+        } else {
+          // QR no reconocido / error
+          mostrarNotificacion('❌', r.mensaje || 'Acceso denegado', '#dc2626');
+          resultEl.style.display = 'none';
+        }
+
+        if (qrStatus) qrStatus.style.display = 'none';
+        const delay = r.acceso_denegado ? 7500 : 4000;
+        setTimeout(() => {
+          if (modoQR) {
+            if (qrStatus) { qrStatus.style.display = 'block'; qrStatus.textContent = '📱 Apunta el QR a la cámara...'; }
+            activarModoQR();
+          }
+        }, delay);
+
+      } catch(e) {
+        console.error('Error QR:', e);
+        mostrarNotificacion('❌', 'Error al verificar QR', '#dc2626');
+        setTimeout(() => { if (modoQR) activarModoQR(); }, 3000);
+      }
     }
 
     iniciarVerificacion();

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>PROAGRO — Registro de Proveedor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #b8860b;
+      --bg-dark: #ffffff;
+      --input-bg: #f5f5f5;
+      --border: #cccccc;
+      --text-muted: #555555;
+    }
+
+    body {
+      background-color: #eeeeee;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .registro-card {
+      background: #ffffff;
+      color: #111111;
+      width: 100%;
+      max-width: 500px;
+      padding: 40px;
+      border-top: 4px solid var(--gold);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .form-group { margin-bottom: 20px; }
+
+    label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 12px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: #111111;
+      font-family: 'Share Tech Mono', monospace;
+      box-sizing: border-box;
+      transition: border 0.3s;
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    .input-readonly {
+      background: #e8e8e8;
+      color: #888888;
+      border-style: dashed;
+    }
+
+    .btn-main {
+      width: 100%;
+      padding: 14px;
+      background: var(--gold);
+      border: none;
+      color: #ffffff;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: opacity 0.3s;
+    }
+
+    .btn-main:hover { opacity: 0.9; }
+
+    .file-custom {
+      font-size: 11px;
+      color: #555555;
+      padding: 10px;
+      border: 1px dashed var(--border);
+      background: #f0f0f0;
+    }
+
+    .alert-error {
+      background: #fff0f0;
+      color: #c0392b;
+      padding: 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      margin-bottom: 20px;
+      border-left: 3px solid #e74c3c;
+    }
+  </style>
+</head>
+<body>
+
+<div class="registro-card">
+  
+  <% if (paso === 'formulario') { %>
+    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:28px; color:var(--gold); margin:0;">REGISTRO DE PROVEEDOR</h2>
+    <p style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#555; margin-bottom:30px;">ESTADO: PASO 01_DATOS_EMPRESA</p>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="alert-error"><%= error %></div>
+    <% } %>
+
+    <form action="/registro/enviar-codigo" method="POST" enctype="multipart/form-data">
+      
+      <div class="form-group">
+        <label>01. CONSTANCIA DE SITUACIÓN FISCAL (PDF)</label>
+        <div class="file-custom">
+          <input type="file" name="constancia" accept=".pdf" required onchange="handleFile(this)">
+        </div>
+        <p id="pdf-status" style="font-size:11px; color:#888; margin-top:6px; font-family:'Share Tech Mono',monospace;">Selecciona el PDF para extraer RFC y Razón Social.</p>
+      </div>
+
+      <div class="form-group">
+        <label>02. RFC</label>
+        <input type="text" name="rfc" id="rfc" class="input-field input-readonly" placeholder="Esperando extraccion de datos" readonly>
+      </div>
+
+      <div class="form-group">
+        <label>03. RAZÓN SOCIAL</label>
+        <input type="text" name="razon_social" id="razon_social" class="input-field input-readonly" placeholder="Esperando extraccion de datos" readonly>
+      </div>
+
+
+        <div class="form-group" style="flex: 2;">
+          <label>04. REGISTRO PATRONAL</label>
+          <input type="text" name="padron" id="padron" class="input-field" placeholder="Registro Patronal" required oninput="onPadronInput(this.value)">
+          <p id="padron-status" style="font-size:11px; color:#888; margin-top:6px; font-family:'Share Tech Mono',monospace;"></p>
+        </div>
+
+      <div class="form-group">
+        <label>05. CORREO ELECTRÓNICO</label>
+        <input type="email" name="correo" class="input-field" placeholder="ejemplo@proagro.com" required>
+      </div>
+
+      <div style="display: flex; gap: 15px;">
+        <div class="form-group" style="flex: 1;">
+          <label>06. TELÉFONO</label>
+          <input type="tel" name="telefono" class="input-field" placeholder="10 DÍGITOS" maxlength="10" required>
+        </div>
+        <div class="form-group" style="flex: 2;">
+          <label>07. REPRESENTANTE</label>
+          <input type="text" name="representante" class="input-field" placeholder="NOMBRE COMPLETO" required>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-main" id="btn-submit" disabled>GENERAR ACCESO </button>
+    </form>
+
+  <% } else if (paso === 'verificacion') { %>
+
+    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:28px; color:var(--gold); margin:0;">VERIFICACIÓN</h2>
+    <p style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#555; margin-bottom:30px;">CÓDIGO ENVIADO A: <%= correo %></p>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="alert-error"><%= error %></div>
+    <% } %>
+
+    <form action="/registro/verificar-codigo" method="POST">
+      <input type="hidden" name="correo" value="<%= correo %>">
+
+      <div class="form-group">
+        <label>INGRESE CLAVE DE 6 DÍGITOS</label>
+        <input type="text" name="codigo" maxlength="6" required
+               class="input-field" 
+               style="font-size:32px; text-align:center; letter-spacing:10px; color:var(--gold); border-color:var(--gold)">
+      </div>
+
+      <button type="submit" class="btn-main">VALIDAR Y FINALIZAR_</button>
+    </form>
+  <% } else if (paso === 'exito') { %>
+
+    <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:28px; color:var(--gold); margin:0;">ACCESO CREADO</h2>
+    <p style="font-family:'Share Tech Mono',monospace; font-size:12px; color:#555; margin-bottom:30px;">ESTADO: REGISTRO_COMPLETADO</p>
+
+    <div style="background:#f0fdf4; border:1px solid #86efac; padding:20px; margin-bottom:20px;">
+      <p style="font-family:'Share Tech Mono',monospace; font-size:11px; color:#555; margin:0 0 16px;">CREDENCIALES DE ACCESO — GUARDALAS EN UN LUGAR SEGURO</p>
+      <div style="margin-bottom:12px;">
+        <span style="font-family:'Share Tech Mono',monospace; font-size:11px; color:#888; display:block;">USUARIO</span>
+        <span style="font-family:'Share Tech Mono',monospace; font-size:18px; color:var(--gold); letter-spacing:2px;"><%= usuario %></span>
+      </div>
+      <div>
+        <span style="font-family:'Share Tech Mono',monospace; font-size:11px; color:#888; display:block;">CONTRASEÑA TEMPORAL</span>
+        <span style="font-family:'Share Tech Mono',monospace; font-size:18px; color:#4ade80; letter-spacing:2px;"><%= tempPassword %></span>
+      </div>
+    </div>
+
+    <a href="/login" class="btn-main" style="display:block; text-align:center; text-decoration:none; color:#000;">IR AL LOGIN</a>
+
+  <% } %>
+
+  <div style="margin-top:25px; text-align:center; border-top: 1px solid #dddddd; padding-top: 15px;">
+    <a href="/login" style="font-family:'Share Tech Mono',monospace; font-size:11px; color:#555; text-decoration:none;">[ CANCELAR_RETORNO_AL_LOGIN ]</a>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let rfcVerificado   = false;
+  let padronVerificado = false;
+  let _padronTimeout   = null;
+
+  function checkFormValid() {
+    const btn           = document.getElementById('btn-submit');
+    if (!btn) return;
+    const rfc           = (document.getElementById('rfc')?.value || '').trim();
+    const razonSocial   = (document.getElementById('razon_social')?.value || '').trim();
+    const correo        = (document.querySelector('input[name="correo"]')?.value || '').trim();
+    const telefono      = (document.querySelector('input[name="telefono"]')?.value || '').trim();
+    const representante = (document.querySelector('input[name="representante"]')?.value || '').trim();
+    const padron        = (document.getElementById('padron')?.value || '').trim();
+    const todosLlenos   = rfc && razonSocial && correo && telefono && representante && padron;
+    const listo = todosLlenos && rfcVerificado && padronVerificado;
+    btn.disabled       = !listo;
+    btn.style.opacity  = listo ? '1' : '0.45';
+    btn.style.cursor   = listo ? 'pointer' : 'not-allowed';
+  }
+
+  async function verificarPadron(padron) {
+    const statusEl = document.getElementById('padron-status');
+    if (!padron) {
+      statusEl.textContent = '';
+      padronVerificado = false;
+      checkFormValid();
+      return;
+    }
+    statusEl.textContent = '⏳ Verificando Registro Patronal...';
+    statusEl.style.color = '#888';
+    padronVerificado = false;
+    checkFormValid();
+    try {
+      const res  = await fetch(`/registro/verificar-padron?padron=${encodeURIComponent(padron)}`);
+      const data = await res.json();
+      if (data.existe) {
+        statusEl.textContent = '🚫 Registro Patronal ya dado de alta — contacta al administrador';
+        statusEl.style.color = '#f87171';
+        padronVerificado = false;
+      } else {
+        statusEl.textContent = '✅ Registro Patronal disponible';
+        statusEl.style.color = '#4ade80';
+        padronVerificado = true;
+      }
+    } catch(e) {
+      statusEl.textContent = '⚠️ No se pudo verificar — intenta de nuevo';
+      statusEl.style.color = '#f59e0b';
+      padronVerificado = false;
+    }
+    checkFormValid();
+  }
+
+  function onPadronInput(value) {
+    clearTimeout(_padronTimeout);
+    padronVerificado = false;
+    checkFormValid();
+    _padronTimeout = setTimeout(() => verificarPadron(value.trim()), 600);
+  }
+
+  async function verificarRFC(rfc) {
+    const statusEl = document.getElementById('pdf-status');
+    statusEl.textContent = '⏳ Verificando RFC en el sistema...';
+    statusEl.style.color = '#888';
+    rfcVerificado = false;
+    checkFormValid();
+    try {
+      const res  = await fetch(`/registro/verificar-rfc?rfc=${encodeURIComponent(rfc)}`);
+      const data = await res.json();
+      if (data.existe) {
+        statusEl.textContent = '🚫 Empresa ya registrada en el sistema — contacta al administrador';
+        statusEl.style.color = '#f87171';
+        rfcVerificado = false;
+      } else {
+        statusEl.textContent = '✅ RFC y Razón Social extraídos — RFC disponible';
+        statusEl.style.color = '#4ade80';
+        rfcVerificado = true;
+      }
+    } catch(e) {
+      statusEl.textContent = '⚠️ No se pudo verificar el RFC — intenta de nuevo';
+      statusEl.style.color = '#f59e0b';
+      rfcVerificado = false;
+    }
+    checkFormValid();
+  }
+
+  async function handleFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const rfcEl    = document.getElementById('rfc');
+    const razonEl  = document.getElementById('razon_social');
+    const statusEl = document.getElementById('pdf-status');
+
+    statusEl.textContent = '⏳ Procesando PDF...';
+    statusEl.style.color = '#888';
+    rfcEl.value    = '';
+    razonEl.value  = '';
+    rfcVerificado  = false;
+    checkFormValid();
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page    = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        fullText += content.items.map(item => item.str).join(' ') + '\n';
+      }
+
+      const matchRfc    = fullText.match(/[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}/);
+      const matchNombre = fullText.match(/Registro Federal de Contribuyentes\s+(.+?)\s+Nombre,\s*denominaci[oó]n/i);
+
+      rfcEl.value   = matchRfc    ? matchRfc[0]           : '';
+      razonEl.value = matchNombre ? matchNombre[1].trim() : '';
+
+      if (matchRfc) {
+        await verificarRFC(matchRfc[0]);
+      } else {
+        statusEl.textContent = '⚠️ No se encontró RFC — verifica que sea la Constancia de Situación Fiscal del SAT';
+        statusEl.style.color = '#f59e0b';
+        checkFormValid();
+      }
+    } catch(e) {
+      statusEl.textContent = '❌ Error al leer el PDF: ' + e.message;
+      statusEl.style.color = '#f87171';
+      rfcVerificado = false;
+      checkFormValid();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    ['input[name="correo"]', 'input[name="telefono"]', 'input[name="representante"]'].forEach(sel => {
+      document.querySelector(sel)?.addEventListener('input', checkFormValid);
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Pool } = require('pg');
+const QRCode  = require('qrcode');
 
 // Pool para reconocimiento_db
 const poolFacial = new Pool({
@@ -20,17 +21,61 @@ const poolSolicitudes = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+// Pool para bd_principal (proveedores)
+const poolBDPrincipal = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.BD_PRINCIPAL_NAME || 'bd_principal',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+async function obtenerPadronPorEmpresas(empresas) {
+  if (!empresas.length) return {};
+  try {
+    const r = await poolBDPrincipal.query(
+      `SELECT LOWER(TRIM(nombre)) AS nombre_key, padron
+       FROM proveedores
+       WHERE LOWER(TRIM(nombre)) = ANY($1)`,
+      [empresas.map(e => e.toLowerCase().trim())]
+    );
+    const map = {};
+    r.rows.forEach(row => { map[row.nombre_key] = row.padron; });
+    return map;
+  } catch(e) {
+    console.error('Error obteniendo padrones:', e.message);
+    return {};
+  }
+}
+
+// Migración: añade columnas es_invitado y qr_code si no existen
+(async () => {
+  try {
+    await poolFacial.query(`
+      ALTER TABLE trabajadores
+        ADD COLUMN IF NOT EXISTS es_invitado BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS qr_code     TEXT
+    `);
+    console.log('[MIGRACIÓN] trabajadores: columnas es_invitado, qr_code OK');
+  } catch(e) {
+    console.error('[MIGRACIÓN] trabajadores:', e.message);
+  }
+})();
+
 function requireAuth(req, res, next) {
-  if (!req.session?.user) return res.status(401).json({ error: 'No autenticado' });
+  console.log('AUTH:', req.method, req.path, '| session keys:', Object.keys(req.session));
+  if (!req.session?.user && !req.session?.asistencia_user)
+    return res.status(401).json({ error: 'No autenticado' });
   next();
 }
+
 function requireSeguridad(req, res, next) {
-  if (req.session?.user?.rol !== 'seguridad_fisica')
+  const rol = req.session?.user?.rol || req.session?.asistencia_user?.rol;
+  if (rol !== 'seguridad_fisica')
     return res.status(403).json({ error: 'Solo Seguridad Física puede acceder' });
   next();
 }
 
-// Solo contratista puede enrolar
 function requireEnrolador(req, res, next) {
   const rol = req.session?.user?.rol;
   if (rol !== 'contratista')
@@ -45,21 +90,62 @@ function calcularDistancia(desc1, desc2) {
   return Math.sqrt(sum);
 }
 
-// ─── POST /facial/verificar ────────────────────────
-// Reconoce rostro, busca solicitud activo y determina entrada/salida automáticamente
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER: Valida si un trabajador puede registrar checada
+// ─────────────────────────────────────────────────────────────────────────────
+async function validarAccesoTrabajador(trabajadorId) {
+  const { rows } = await poolFacial.query(
+    `SELECT id, nombre, apellido, estatus, activo, fecha_induccion
+     FROM trabajadores WHERE id = $1`,
+    [trabajadorId]
+  );
+  const t = rows[0];
+  if (!t) return { permitido: false, razon: 'NO_ENCONTRADO', detalle: 'Trabajador no encontrado en el sistema.' };
+
+  const nombreCompleto = `${t.nombre} ${t.apellido}`;
+
+  if (t.estatus === 'vetado') return { permitido: false, razon: 'VETADO', detalle: `${nombreCompleto} se encuentra vetado y no puede registrar acceso. Contacta al área de Seguridad Física.` };
+  if (t.estatus !== 'activo' || !t.activo) return { permitido: false, razon: 'INACTIVO', detalle: `${nombreCompleto} no tiene estatus activo en el sistema.` };
+  if (!t.fecha_induccion) return { permitido: false, razon: 'SIN_INDUCCION', detalle: `${nombreCompleto} no tiene fecha de inducción registrada. Es necesario completar la inducción antes de ingresar.` };
+
+  const hoy = new Date();
+  const fechaInduccion = new Date(t.fecha_induccion);
+  const limiteVigencia = new Date(fechaInduccion);
+  limiteVigencia.setFullYear(limiteVigencia.getFullYear() + 1);
+  if (hoy > limiteVigencia) {
+    const fechaStr = fechaInduccion.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+    const vencioStr = limiteVigencia.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+    return { permitido: false, razon: 'INDUCCION_VENCIDA', detalle: `La inducción de ${nombreCompleto} venció el ${vencioStr}. Fue realizada el ${fechaStr} y solo tiene vigencia de 1 año. Se requiere renovación.` };
+  }
+
+  const hoyStr = hoy.toISOString().split('T')[0];
+  const { rows: permisos } = await poolSolicitudes.query(
+    `SELECT p.id, p.folio FROM permisos p
+     INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
+     WHERE p.estado = 'activo' AND $1 BETWEEN p.fecha_inicio AND p.fecha_fin
+       AND LOWER(pp.nombre) = LOWER($2) LIMIT 1`,
+    [hoyStr, nombreCompleto]
+  );
+  if (!permisos.length) return { permitido: false, razon: 'SIN_PERMISO', detalle: `${nombreCompleto} no tiene un permiso de acceso activo y vigente para el día de hoy.` };
+
+  return { permitido: true, trabajador: t };
+}
+
+// ─── POST /facial/verificar ────────────────────────────────────────────────
 router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
   const { descriptor } = req.body;
   if (!descriptor || !Array.isArray(descriptor))
     return res.status(400).json({ error: 'Descriptor requerido' });
 
   try {
-    const ip        = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    console.log('HEADERS IP:', req.headers['x-real-ip'], '| body ip:', req.body.ip_cliente, '| socket:', req.socket.remoteAddress);
+    const raw = req.body.ip_cliente || req.headers['x-real-ip'] || req.socket.remoteAddress || '';
+    const ip = raw.replace('::ffff:', '').split(',')[0].trim();
     const userAgent = req.headers['user-agent'];
 
-    // 1. Reconocer rostro
     const empleados = await poolFacial.query(
       `SELECT id, nombre, apellido, area, cargo, empresa, face_descriptor
-       FROM trabajadores WHERE activo = true AND face_descriptor IS NOT NULL`
+       FROM trabajadores WHERE face_descriptor IS NOT NULL`
     );
 
     let mejorMatch = null, mejorDistancia = 999;
@@ -74,118 +160,249 @@ router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
 
     if (!mejorMatch || mejorDistancia >= UMBRAL) {
       await poolFacial.query(
-        `INSERT INTO accesos (resultado, ip_origen, user_agent, tipo_movimiento, fecha_hora)
-         VALUES ($1,$2,$3,$4,NOW())`,
+        `INSERT INTO accesos (resultado, ip_origen, user_agent, tipo_movimiento, fecha_hora) VALUES ($1,$2,$3,$4,NOW())`,
         ['fallido', ip, userAgent, 'entrada']
       );
       return res.status(401).json({ acceso: 'denegado', mensaje: 'Rostro no reconocido' });
     }
 
     const similitud = parseFloat((1 - mejorDistancia).toFixed(4));
-    const nombreCompleto = `${mejorMatch.nombre} ${mejorMatch.apellido}`;
+    const validacion = await validarAccesoTrabajador(mejorMatch.id);
 
-    // 2. Buscar solicitud activo hoy para esta persona
-    const hoy = new Date().toISOString().split('T')[0];
-    const solicitudResult = await poolSolicitudes.query(
-      `SELECT p.id, p.folio, p.empresa, p.fecha_inicio, p.fecha_fin
-       FROM permisos p
-       INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
-       WHERE p.estado = 'activo'
-         AND $1 BETWEEN p.fecha_inicio AND p.fecha_fin
-         AND LOWER(pp.nombre) = LOWER($2)
-       LIMIT 1`,
-      [hoy, nombreCompleto]
-    );
-
-    const solicitud = solicitudResult.rows[0] || null;
-
-    // 3. Determinar tipo de movimiento automáticamente
-    // Buscar último registro de hoy para este empleado
-    const ultimoAcceso = await poolFacial.query(
-      `SELECT tipo_movimiento FROM accesos
-       WHERE empleado_id = $1
-         AND resultado = 'exitoso'
-         AND DATE(fecha_hora) = CURRENT_DATE
-       ORDER BY fecha_hora DESC
-       LIMIT 1`,
-      [mejorMatch.id]
-    );
-
-    let tipo_movimiento;
-    if (ultimoAcceso.rows.length === 0 || ultimoAcceso.rows[0].tipo_movimiento === 'salida') {
-      tipo_movimiento = 'entrada';
-    } else {
-      tipo_movimiento = 'salida';
+    if (!validacion.permitido) {
+      await poolFacial.query(
+        `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,'fallido',$2,$3,$4,'entrada',NOW(),$5,$6,$7)`,
+        [mejorMatch.id, similitud, ip, userAgent, `${mejorMatch.nombre} ${mejorMatch.apellido}`, mejorMatch.area, mejorMatch.empresa]
+      );
+      return res.json({ acceso: 'denegado', acceso_denegado: true, razon: validacion.razon, detalle: validacion.detalle, nombre: `${mejorMatch.nombre} ${mejorMatch.apellido}` });
     }
 
-    // 4. Registrar acceso
+    const nombreCompleto = `${mejorMatch.nombre} ${mejorMatch.apellido}`;
+    const hoy = new Date().toISOString().split('T')[0];
+    const solicitudResult = await poolSolicitudes.query(
+      `SELECT p.id, p.folio, p.empresa, p.fecha_inicio, p.fecha_fin FROM permisos p
+       INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
+       WHERE p.estado = 'activo' AND $1 BETWEEN p.fecha_inicio AND p.fecha_fin AND LOWER(pp.nombre) = LOWER($2) LIMIT 1`,
+      [hoy, nombreCompleto]
+    );
+    const solicitud = solicitudResult.rows[0] || null;
+
+    const ultimoAcceso = await poolFacial.query(
+      `SELECT tipo_movimiento FROM accesos WHERE empleado_id=$1 AND resultado='exitoso' AND DATE(fecha_hora)=CURRENT_DATE ORDER BY fecha_hora DESC LIMIT 1`,
+      [mejorMatch.id]
+    );
+    const tipo_movimiento = (ultimoAcceso.rows.length === 0 || ultimoAcceso.rows[0].tipo_movimiento === 'salida') ? 'entrada' : 'salida';
+
     await poolFacial.query(
-      `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, permiso_id, fecha_hora)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
-      [mejorMatch.id, 'exitoso', similitud, ip, userAgent, tipo_movimiento, solicitud?.id || null]
+      `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, permiso_id, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$9,$10)`,
+      [mejorMatch.id, 'exitoso', similitud, ip, userAgent, tipo_movimiento, solicitud?.id || null, `${mejorMatch.nombre} ${mejorMatch.apellido}`, mejorMatch.area, mejorMatch.empresa]
     );
 
     return res.json({
-      acceso: 'permitido',
-      tipo_movimiento,
-      empleado: {
-        id:       mejorMatch.id,
-        nombre:   mejorMatch.nombre,
-        apellido: mejorMatch.apellido,
-        area:     mejorMatch.area,
-        cargo:    mejorMatch.cargo,
-        empresa:  mejorMatch.empresa,
-      },
-      solicitud: solicitud ? {
-        id:     solicitud.id,
-        folio:  solicitud.folio,
-        empresa: solicitud.empresa,
-        fecha_inicio: solicitud.fecha_inicio,
-        fecha_fin:    solicitud.fecha_fin,
-      } : null,
+      acceso: 'permitido', tipo_movimiento,
+      empleado: { id: mejorMatch.id, nombre: mejorMatch.nombre, apellido: mejorMatch.apellido, area: mejorMatch.area, cargo: mejorMatch.cargo, empresa: mejorMatch.empresa },
+      solicitud: solicitud ? { id: solicitud.id, folio: solicitud.folio, empresa: solicitud.empresa, fecha_inicio: solicitud.fecha_inicio, fecha_fin: solicitud.fecha_fin } : null,
       similitud,
       hora: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
     });
-
   } catch(e) {
     console.error('Error verificar facial:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// ─── POST /facial/enrolar ──────────────────────────
-router.post('/enrolar', requireAuth, requireEnrolador, async (req, res) => {
-  const { nombre, apellido, email, documento, area, cargo, empresa, descriptor, estatus } = req.body;
-  if (!nombre || !apellido || !descriptor)
-    return res.status(400).json({ error: 'Nombre, apellido y descriptor son obligatorios' });
+
+
+
+
+
+
+
+
+router.post('/verificar-duplicado', requireAuth, requireEnrolador, async (req, res) => {
+  const { nss, empresa } = req.body;  // ya no necesitas nombre ni apellido
+
+  if (!nss) return res.json({ duplicado: false });
 
   try {
-    if (email) {
-      const existe = await poolFacial.query('SELECT id FROM trabajadores WHERE email=$1', [email]);
-      if (existe.rows.length > 0)
-        return res.status(409).json({ error: 'Ya existe un empleado con ese email' });
-    }
-    const result = await poolFacial.query(
-      `INSERT INTO trabajadores (nombre, apellido, email, documento_identidad, area, cargo, empresa, face_descriptor, estatus, activo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, nombre, apellido`,
-      [nombre, apellido, email||null, documento||null, area||'General', cargo||'Empleado',
-       empresa||null, JSON.stringify(descriptor), estatus||'no_activo', false]
+    const nssOtraEmpresa = await poolFacial.query(
+      `SELECT id FROM trabajadores
+       WHERE imss_nss = $1 AND activo = true AND LOWER(empresa) != LOWER($2)`,
+      [nss, empresa || '']
     );
-    res.json({ success: true, empleado: result.rows[0] });
+    if (nssOtraEmpresa.rows.length > 0) {
+      return res.json({ duplicado: true, mensaje: 'Este trabajador ya está registrado en el sistema.' });
+    }
+
+    const nssMismaEmpresa = await poolFacial.query(
+      `SELECT id, activo FROM trabajadores
+       WHERE imss_nss = $1 AND LOWER(empresa) = LOWER($2)`,
+      [nss, empresa || '']
+    );
+    if (nssMismaEmpresa.rows.length > 0) {
+      const estado = nssMismaEmpresa.rows[0].activo ? 'activo' : 'inactivo';
+      return res.json({ duplicado: true, mensaje: `Este trabajador ya está registrado en el sistema.` });
+    }
+
+    res.json({ duplicado: false });
+
   } catch(e) {
-    console.error('Error enrolar:', e);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Error en verificación' });
   }
 });
+
+
+
+
+
+
+
+
+// ─── POST /facial/enrolar ──────────────────────────
+router.post('/enrolar', requireAuth, requireEnrolador, async (req, res) => {
+  
+  const {
+    nombre, apellido, email, documento, area, cargo, empresa, descriptor, estatus,
+    imss_vigente, imss_estatus, imss_fecha_vigencia, imss_nss, registro_patronal
+  } = req.body;
+
+  // Validaciones obligatorias
+  if (!nombre || !apellido || !descriptor) {
+    return res.status(400).json({ 
+      error: 'Nombre, apellido y descriptor son obligatorios' 
+    });
+  }
+
+  // Validar formato del descriptor (ejemplo básico)
+  if (typeof descriptor !== 'object' || !descriptor.length) {
+    return res.status(400).json({ 
+      error: 'El descriptor facial debe ser un array válido' 
+    });
+  }
+
+  try {
+    // 1. Validar email duplicado
+    if (email) {
+      const existe = await poolFacial.query(
+        'SELECT id FROM trabajadores WHERE email = $1 AND activo = true',
+        [email]
+      );
+      if (existe.rows.length > 0) {
+        return res.status(409).json({ 
+          error: 'Ya existe un empleado activo con ese email' 
+        });
+      }
+    }
+
+    // 2. Validar NSS (unificado)
+    if (imss_nss) {
+      // Verificar si existe activo en OTRA empresa
+      const nssOtraEmpresa = await poolFacial.query(
+        `SELECT id, nombre, apellido, empresa
+         FROM trabajadores
+         WHERE imss_nss = $1 
+           AND activo = true 
+           AND LOWER(empresa) != LOWER($2)`,
+        [imss_nss, empresa || '']
+      );
+      
+      if (nssOtraEmpresa.rows.length > 0) {
+        const t = nssOtraEmpresa.rows[0];
+        return res.status(409).json({
+          error: `Un trabajador no puede estar dado de alta en dos empresas al mismo tiempo.`
+        });
+      }
+
+      // Verificar si existe en la MISMA empresa (activo o inactivo)
+      const nssMismaEmpresa = await poolFacial.query(
+        `SELECT id, activo FROM trabajadores
+         WHERE imss_nss = $1 AND LOWER(empresa) = LOWER($2)`,
+        [imss_nss, empresa || '']
+      );
+      
+      if (nssMismaEmpresa.rows.length > 0) {
+        const estado = nssMismaEmpresa.rows[0].activo ? 'activo' : 'inactivo';
+        return res.status(409).json({
+          error: `Este trabajador ya está dado de alta en tu empresa (${estado}).`
+        });
+      }
+    }
+
+    
+    // 4. Insertar nuevo trabajador
+    const result = await poolFacial.query(
+      `INSERT INTO trabajadores
+        (nombre, apellido, email, documento_identidad, area, cargo, empresa,
+         face_descriptor, estatus, activo,
+         imss_vigente, imss_estatus, imss_fecha_vigencia, imss_nss, registro_patronal)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING id, nombre, apellido, email, empresa`,
+      [
+        nombre, 
+        apellido, 
+        email || null, 
+        documento || null, 
+        area || 'General', 
+        cargo || 'Empleado',
+        empresa || null, 
+        JSON.stringify(descriptor), 
+        estatus || 'activo',  // Cambiado a 'activo' por defecto
+        true,  // Cambiado a true (activo al enrolarse)
+        imss_vigente !== undefined ? imss_vigente : null,
+        imss_estatus || null, 
+        imss_fecha_vigencia || null, 
+        imss_nss || null, 
+        registro_patronal || null
+      ]
+    );
+    
+    res.json({ 
+      success: true, 
+      empleado: result.rows[0] 
+    });
+    
+  } catch(e) {
+    console.error('Error en enrolamiento:', e);
+    res.status(500).json({ 
+      error: 'Error interno al enrolar trabajador',
+      detalle: process.env.NODE_ENV === 'development' ? e.message : undefined
+    });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // ─── GET /facial/accesos ───────────────────────────
 router.get('/accesos', requireAuth, requireSeguridad, async (req, res) => {
   try {
     const result = await poolFacial.query(
       `SELECT a.id, a.resultado, a.similitud, a.tipo_movimiento,
-              a.permiso_id, a.fecha_hora,
+              a.permiso_id, a.fecha_hora, a.ip_origen,
               COALESCE(a.fecha_hora::text, a.timestamp::text) as tiempo,
-              e.nombre, e.apellido, e.area, e.empresa
+              COALESCE(e.nombre || ' ' || e.apellido, a.nombre_snapshot) as nombre_completo,
+              COALESCE(e.area,    a.area_snapshot)    as area,
+              COALESCE(e.empresa, a.empresa_snapshot) as empresa
        FROM accesos a
        LEFT JOIN trabajadores e ON a.empleado_id = e.id
        ORDER BY COALESCE(a.fecha_hora, a.timestamp) DESC
@@ -211,7 +428,7 @@ router.get('/empleados', requireAuth, requireSeguridad, async (req, res) => {
   }
 });
 
-// ─── GET /facial/mi-personal ── Lista personal del contratista
+// ─── GET /facial/mi-personal ──────────────────────
 router.get('/mi-personal', requireAuth, async (req, res) => {
   if (req.session.user.rol !== 'contratista')
     return res.status(403).json({ error: 'Sin acceso' });
@@ -220,31 +437,42 @@ router.get('/mi-personal', requireAuth, async (req, res) => {
     const r = await poolFacial.query(
       `SELECT e.id, e.nombre, e.apellido, e.documento_identidad, e.area, e.cargo,
               e.empresa, e.estatus, e.activo, e.creado_en,
-              e.imss_vigente, e.imss_estatus, e.imss_fecha_vigencia,
+              e.imss_vigente, e.imss_estatus, e.imss_fecha_vigencia, e.fecha_induccion,
+              e.imss_nss,
               (SELECT COUNT(*) FROM documentos d WHERE d.empleado_id = e.id) as total_docs
        FROM trabajadores e
-       WHERE LOWER(e.empresa) = LOWER($1)
+       WHERE LOWER(e.empresa) = LOWER($1) AND e.activo = true
        ORDER BY e.creado_en DESC`,
       [empresa]
     );
-    res.json({ success: true, data: r.rows });
+    const padronMap = await obtenerPadronPorEmpresas(
+      [...new Set(r.rows.map(e => (e.empresa||'').toLowerCase().trim()).filter(Boolean))]
+    );
+    const data = r.rows.map(e => ({ ...e, padron: padronMap[(e.empresa||'').toLowerCase().trim()] || null }));
+    res.json({ success: true, data });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// ─── GET /facial/todo-personal ── Lista todo el personal (seguridad física)
+// ─── GET /facial/todo-personal ────────────────────
 router.get('/todo-personal', requireAuth, requireSeguridad, async (req, res) => {
   try {
     const r = await poolFacial.query(
       `SELECT e.id, e.nombre, e.apellido, e.documento_identidad, e.area, e.cargo,
               e.empresa, e.estatus, e.activo, e.creado_en,
-              e.imss_vigente, e.imss_estatus, e.imss_fecha_vigencia,
+              e.imss_vigente, e.imss_estatus, e.imss_fecha_vigencia, e.fecha_induccion,
+              e.imss_nss,
               (SELECT COUNT(*) FROM documentos d WHERE d.empleado_id = e.id) as total_docs
        FROM trabajadores e
+       WHERE e.activo = true
        ORDER BY e.creado_en DESC`
     );
-    res.json({ success: true, data: r.rows });
+    const padronMap = await obtenerPadronPorEmpresas(
+      [...new Set(r.rows.map(e => (e.empresa||'').toLowerCase().trim()).filter(Boolean))]
+    );
+    const data = r.rows.map(e => ({ ...e, padron: padronMap[(e.empresa||'').toLowerCase().trim()] || null }));
+    res.json({ success: true, data });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -270,7 +498,6 @@ router.get('/empleados-por-empresa', requireAuth, async (req, res) => {
 });
 
 // ─── GET /facial/empleados-pendientes ─────────────
-// Empleados creados desde documentos, sin rostro aún
 router.get('/empleados-pendientes', requireAuth, requireEnrolador, async (req, res) => {
   try {
     const result = await poolFacial.query(
@@ -286,7 +513,6 @@ router.get('/empleados-pendientes', requireAuth, requireEnrolador, async (req, r
 });
 
 // ─── PUT /facial/empleados/:id/enrolar ────────────
-// Actualiza empleado pendiente con descriptor facial y lo activa
 router.put('/empleados/:id/enrolar', requireAuth, requireEnrolador, async (req, res) => {
   const { nombre, apellido, email, documento, area, cargo, empresa, descriptor } = req.body;
   if (!descriptor) return res.status(400).json({ error: 'Descriptor requerido' });
@@ -315,17 +541,14 @@ router.put('/empleados/:id/enrolar', requireAuth, requireEnrolador, async (req, 
   }
 });
 
-// ─── PUT /facial/empleados/:id/estatus ── Solo Seguridad Física
+// ─── PUT /facial/empleados/:id/estatus ────────────
 router.put('/empleados/:id/estatus', requireAuth, requireSeguridad, async (req, res) => {
   const { estatus } = req.body;
-  if (!['activo', 'vetado'].includes(estatus))
+  if (!['activo', 'vetado', 'no_activo'].includes(estatus))
     return res.status(400).json({ error: 'Estatus inválido' });
   try {
     const activo = estatus === 'activo';
-    await poolFacial.query(
-      `UPDATE trabajadores SET estatus=$1, activo=$2 WHERE id=$3`,
-      [estatus, activo, req.params.id]
-    );
+    await poolFacial.query(`UPDATE trabajadores SET estatus=$1, activo=$2 WHERE id=$3`, [estatus, activo, req.params.id]);
     res.json({ success: true });
   } catch(e) {
     res.status(500).json({ error: e.message });
@@ -339,6 +562,302 @@ router.delete('/empleados/:id', requireAuth, requireSeguridad, async (req, res) 
     res.json({ success: true });
   } catch(e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── GET /facial/empleados/:id/accesos ────────────
+router.get('/empleados/:id/accesos', requireAuth, async (req, res) => {
+  try {
+    const r = await poolFacial.query(
+      `SELECT id, tipo_movimiento, resultado, similitud, fecha_hora
+       FROM accesos WHERE empleado_id=$1 AND resultado='exitoso'
+       ORDER BY fecha_hora DESC LIMIT 50`,
+      [req.params.id]
+    );
+    res.json({ success: true, data: r.rows });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── PUT /facial/empleados/:id/fecha-induccion ────
+router.put('/empleados/:id/fecha-induccion', requireAuth, requireSeguridad, async (req, res) => {
+  const { fecha_induccion } = req.body;
+  try {
+    await poolFacial.query(`UPDATE trabajadores SET fecha_induccion=$1 WHERE id=$2`, [fecha_induccion || null, req.params.id]);
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── GET /facial/notificaciones-sin-checkin ───────
+router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
+  const empresa = req.session.user?.nombre_completo;
+  if (!empresa) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const trabajadores = await poolFacial.query(`
+      SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
+        COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
+      FROM trabajadores t
+      WHERE LOWER(t.empresa) = LOWER($1) AND t.activo = true
+    `, [empresa]);
+
+    const hoy = new Date();
+    const sinCheckin = trabajadores.rows.filter(t => {
+      if (!t.ultimo_acceso) return true;
+      const diffDias = Math.floor((hoy - new Date(t.ultimo_acceso)) / (1000*60*60*24));
+      return diffDias >= 4;
+    });
+    res.json({ success: true, data: sinCheckin, total: sinCheckin.length });
+  } catch(e) {
+    console.error('Error notificaciones:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── POST /facial/registrar-invitado ─────────────────────────────────────
+// Llamado por N8N. No requiere sesión de usuario (es un webhook interno).
+router.post('/registrar-invitado', async (req, res) => {
+  const { nombre, apellido, empresa, permiso_id, nss } = req.body;
+  if (!nombre || !apellido) {
+    return res.status(400).json({ success: false, error: 'nombre y apellido son requeridos' });
+  }
+
+  try {
+    const nombreTrim   = nombre.trim();
+    const apellidoTrim = apellido.trim();
+    const empresaTrim  = (empresa || '').trim();
+    const nssTrim      = (nss || '').trim();
+
+    // Buscar trabajador regular existente:
+    // Si viene NSS → comparar por NSS (único, sin ambigüedad)
+    // Si no viene NSS → comparar por nombre + apellido + empresa (fallback)
+    let yaExiste;
+    if (nssTrim) {
+      yaExiste = await poolFacial.query(
+        `SELECT id, qr_code FROM trabajadores
+         WHERE es_invitado IS NOT TRUE
+           AND imss_nss = $1
+           AND activo = true
+         LIMIT 1`,
+        [nssTrim]
+      );
+    } else {
+      yaExiste = await poolFacial.query(
+        `SELECT id, qr_code FROM trabajadores
+         WHERE es_invitado IS NOT TRUE
+           AND LOWER(TRIM(nombre))   = LOWER($1)
+           AND LOWER(TRIM(apellido)) = LOWER($2)
+           AND LOWER(TRIM(empresa))  = LOWER($3)
+           AND activo = true
+         LIMIT 1`,
+        [nombreTrim, apellidoTrim, empresaTrim]
+      );
+    }
+
+    if (yaExiste.rows.length > 0) {
+      const trabajador = yaExiste.rows[0];
+      const qrData = JSON.stringify({
+        nombre:      `${nombreTrim} ${apellidoTrim}`,
+        empresa:     empresaTrim,
+        es_invitado: false,
+        id:          trabajador.id
+      });
+      const qrBuffer = await QRCode.toBuffer(qrData, { width: 300, margin: 2 });
+      const qrBase64 = qrBuffer.toString('base64');
+      console.log(`[INVITADO] Ya enrolado, reutilizando id=${trabajador.id} nombre="${nombreTrim} ${apellidoTrim}"`);
+      return res.json({
+        success:      true,
+        invitado_id:  trabajador.id,
+        ya_enrolado:  true,
+        qr_data:      qrData,
+        qr_base64:    `data:image/png;base64,${qrBase64}`
+      });
+    }
+
+    const insertResult = await poolFacial.query(
+      `INSERT INTO trabajadores (nombre, apellido, empresa, estatus, activo, es_invitado)
+       VALUES ($1, $2, $3, 'activo', true, true)
+       RETURNING id`,
+      [nombreTrim, apellidoTrim, empresaTrim]
+    );
+    const invitadoId = insertResult.rows[0].id;
+
+    const qrData = JSON.stringify({
+      nombre:      `${nombreTrim} ${apellidoTrim}`,
+      empresa:     empresaTrim,
+      es_invitado: true,
+      id:          invitadoId
+    });
+
+    const qrBuffer = await QRCode.toBuffer(qrData, { width: 300, margin: 2 });
+    const qrBase64 = qrBuffer.toString('base64');
+
+    await poolFacial.query(
+      `UPDATE trabajadores SET qr_code = $1 WHERE id = $2`,
+      [qrData, invitadoId]
+    );
+
+    console.log(`[INVITADO] Registrado id=${invitadoId} nombre="${nombreTrim} ${apellidoTrim}"`);
+    return res.json({
+      success:     true,
+      invitado_id: invitadoId,
+      qr_data:     qrData,
+      qr_base64:   `data:image/png;base64,${qrBase64}`
+    });
+  } catch(e) {
+    console.error('Error registrar-invitado:', e);
+    return res.json({ success: false, error: e.message });
+  }
+});
+
+// ─── POST /facial/verificar-qr ────────────────────────────────────────────
+router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => {
+  const { qr_data } = req.body;
+  if (!qr_data) return res.status(400).json({ error: 'QR data requerido' });
+
+  try {
+    const raw = req.body.ip_cliente || req.headers['x-real-ip'] || req.socket.remoteAddress || '';
+    const ip = raw.replace('::ffff:', '').split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
+
+    let qrObj;
+    try { qrObj = typeof qr_data === 'string' ? JSON.parse(qr_data) : qr_data; }
+    catch(e) { return res.status(400).json({ error: 'QR inválido' }); }
+
+    const { nombre, empresa } = qrObj;
+    if (!nombre || !empresa) return res.status(400).json({ error: 'QR incompleto' });
+
+    // ── Flujo para invitados ──────────────────────────────────────────────
+    if (qrObj.es_invitado) {
+      const invResult = await poolFacial.query(
+        `SELECT id, nombre, apellido, area, cargo, empresa, activo, es_invitado
+         FROM trabajadores
+         WHERE id = $1 AND es_invitado = true AND activo = true LIMIT 1`,
+        [qrObj.id]
+      );
+      if (!invResult.rows.length) {
+        return res.status(401).json({ acceso: 'denegado', mensaje: 'Invitado no encontrado o inactivo' });
+      }
+
+      const inv = invResult.rows[0];
+      const nombreCompleto = `${inv.nombre} ${inv.apellido}`;
+
+      const ultimoAccesoInv = await poolFacial.query(
+        `SELECT tipo_movimiento FROM accesos WHERE empleado_id=$1 AND resultado='exitoso' AND DATE(fecha_hora)=CURRENT_DATE ORDER BY fecha_hora DESC LIMIT 1`,
+        [inv.id]
+      );
+      const tipo_movimiento = (ultimoAccesoInv.rows.length === 0 || ultimoAccesoInv.rows[0].tipo_movimiento === 'salida') ? 'entrada' : 'salida';
+
+      await poolFacial.query(
+        `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot)
+         VALUES ($1,'exitoso',1.0,$2,$3,$4,NOW(),$5,$6,$7)`,
+        [inv.id, ip, userAgent, tipo_movimiento, nombreCompleto, inv.area || 'Invitado', inv.empresa]
+      );
+
+      return res.json({
+        acceso: 'permitido', tipo_movimiento, es_invitado: true,
+        empleado: { id: inv.id, nombre: inv.nombre, apellido: inv.apellido, area: inv.area || 'Invitado', cargo: inv.cargo || 'Visita', empresa: inv.empresa },
+        solicitud: null,
+        hora: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+      });
+    }
+
+    // ── Flujo normal (trabajadores regulares) ─────────────────────────────
+    const empResult = await poolFacial.query(
+      `SELECT id, nombre, apellido, area, cargo, empresa, estatus
+       FROM trabajadores
+       WHERE LOWER(CONCAT(nombre, ' ', apellido)) = LOWER($1) AND LOWER(empresa)=LOWER($2) AND activo=true LIMIT 1`,
+      [nombre, empresa]
+    );
+    if (!empResult.rows.length) return res.status(401).json({ acceso: 'denegado', mensaje: 'Trabajador no encontrado o inactivo' });
+
+    const trabajador = empResult.rows[0];
+    const validacion = await validarAccesoTrabajador(trabajador.id);
+
+    if (!validacion.permitido) {
+      await poolFacial.query(
+        `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,'fallido',1.0,$2,$3,'entrada',NOW(),$4,$5,$6)`,
+        [trabajador.id, ip, userAgent, `${trabajador.nombre} ${trabajador.apellido}`, trabajador.area, trabajador.empresa]
+      );
+      return res.json({ acceso: 'denegado', acceso_denegado: true, razon: validacion.razon, detalle: validacion.detalle, nombre: `${trabajador.nombre} ${trabajador.apellido}` });
+    }
+
+    const hoy = new Date().toISOString().split('T')[0];
+    const solicitudResult = await poolSolicitudes.query(
+      `SELECT p.id, p.folio, p.empresa, p.fecha_inicio, p.fecha_fin FROM permisos p
+       INNER JOIN permiso_personal pp ON pp.permiso_id=p.id
+       WHERE p.estado='activo' AND $1 BETWEEN p.fecha_inicio AND p.fecha_fin AND LOWER(pp.nombre)=LOWER($2) LIMIT 1`,
+      [hoy, nombre]
+    );
+    const solicitud = solicitudResult.rows[0] || null;
+
+    const ultimoAcceso = await poolFacial.query(
+      `SELECT tipo_movimiento FROM accesos WHERE empleado_id=$1 AND resultado='exitoso' AND DATE(fecha_hora)=CURRENT_DATE ORDER BY fecha_hora DESC LIMIT 1`,
+      [trabajador.id]
+    );
+    const tipo_movimiento = (ultimoAcceso.rows.length===0 || ultimoAcceso.rows[0].tipo_movimiento==='salida') ? 'entrada' : 'salida';
+
+    await poolFacial.query(
+      `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, permiso_id, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,'exitoso',1.0,$2,$3,$4,$5,NOW(),$6,$7,$8)`,
+      [trabajador.id, ip, userAgent, tipo_movimiento, solicitud?.id || null, `${trabajador.nombre} ${trabajador.apellido}`, trabajador.area, trabajador.empresa]
+    );
+
+    return res.json({
+      acceso: 'permitido', tipo_movimiento,
+      empleado: { id: trabajador.id, nombre: trabajador.nombre, apellido: trabajador.apellido, area: trabajador.area, cargo: trabajador.cargo, empresa: trabajador.empresa },
+      solicitud: solicitud ? { id: solicitud.id, folio: solicitud.folio, empresa: solicitud.empresa } : null,
+      hora: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    });
+  } catch(e) {
+    console.error('Error verificar QR:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+
+router.put('/empleados/:id/liberar', requireAuth, async (req, res) => {
+  if (req.session.user.rol !== 'seguridad_fisica')
+    return res.status(403).json({ success: false, error: 'Solo Seguridad Física puede liberar trabajadores.' });
+
+  try {
+    const r = await poolFacial.query(
+      `SELECT id, nombre, apellido, area, empresa FROM trabajadores WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows.length)
+      return res.status(404).json({ success: false, error: 'Trabajador no encontrado' });
+
+    const t = r.rows[0];
+    const nombreCompleto = `${t.nombre} ${t.apellido}`;
+
+    // Guardar snapshot en accesos que aún no lo tienen
+    await poolFacial.query(
+      `UPDATE accesos
+       SET nombre_snapshot  = $1,
+           area_snapshot    = $2,
+           empresa_snapshot = $3
+       WHERE empleado_id = $4 AND nombre_snapshot IS NULL`,
+      [nombreCompleto, t.area, t.empresa, t.id]
+    );
+
+    // Desvincular accesos del trabajador (preserva el historial via snapshot)
+    await poolFacial.query(
+      `UPDATE accesos SET empleado_id = NULL WHERE empleado_id = $1`,
+      [t.id]
+    );
+
+    // Eliminar el trabajador (documentos se eliminan en cascada si hay FK ON DELETE CASCADE,
+    // de lo contrario borrarlos primero)
+    await poolFacial.query(`DELETE FROM documentos WHERE empleado_id = $1`, [t.id]);
+    await poolFacial.query(`DELETE FROM trabajadores WHERE id = $1`, [t.id]);
+
+    res.json({ success: true, data: { id: t.id, nombre: t.nombre, apellido: t.apellido, empresa: t.empresa } });
+  } catch(e) {
+    console.error('Error liberando trabajador:', e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
