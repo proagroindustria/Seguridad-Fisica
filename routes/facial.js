@@ -485,7 +485,7 @@ router.get('/empleados-por-empresa', requireAuth, async (req, res) => {
     return res.json({ success: true, data: [] });
   try {
     const result = await poolFacial.query(
-      `SELECT id, nombre, apellido, area, cargo, documento_identidad, empresa
+      `SELECT id, nombre, apellido, area, cargo, documento_identidad, empresa, imss_nss
        FROM trabajadores
        WHERE activo = true AND estatus = 'activo' AND LOWER(empresa) = LOWER($1)
        ORDER BY nombre ASC`,

@@ -168,7 +168,14 @@ async function verificarPersonalOcupado(rowId, nombre) {
   clearTimeout(_personalTimeouts[rowId]);
   _personalTimeouts[rowId] = setTimeout(async () => {
     try {
-      const resp = await fetch(`/solicitudes/verificar-personal?nombre=${encodeURIComponent(nombre.trim())}`);
+      const filaActual = (seccionesAgregadas['personal'] || []).find(f => f._id === rowId);
+      const nss = filaActual?._nss || '';
+      const credInput = document.getElementById(`inp-${rowId}-num_credencial`);
+      const numCred = credInput ? credInput.value.trim() : '';
+      const params = new URLSearchParams({ nombre: nombre.trim() });
+      if (nss) params.append('nss', nss);
+      if (numCred) params.append('num_credencial', numCred);
+      const resp = await fetch(`/solicitudes/verificar-personal?${params}`);
       const data = await resp.json();
       const rowEl = document.getElementById(`row-${rowId}`);
       if (!rowEl) return;
@@ -1078,6 +1085,7 @@ function seleccionarEmpleado(rowId, e) {
   }
   const fila = (seccionesAgregadas['personal'] || []).find(f => f._id === rowId);
   if (fila && e.id) fila._empleadoId = e.id;
+  if (fila) fila._nss = e.imss_nss || null;
 
   cerrarSugerencias(rowId);
   verificarPersonalOcupado(rowId, `${e.nombre} ${e.apellido}`);
