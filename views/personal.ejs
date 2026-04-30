@@ -233,8 +233,8 @@
          
           <div class="facial-field"><label>Nombre(s) *</label><input type="text" id="enrol-nombre" placeholder="Nombre(s)" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
 <div class="facial-field"><label>Apellidos *</label><input type="text" id="enrol-apellido" placeholder="Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
-          <div class="facial-field"><label>Numero de empleado *</label><input type="text" id="enrol-documento" placeholder="Numero de empleado" oninput="verificarBotonGuardar()"></div>
-          <div class="facial-field"><label>NSS *</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+          <div class="facial-field"><label>Numero de empleado</label><input type="text" id="enrol-documento" placeholder="Numero de empleado"></div>
+          <div class="facial-field"><label>NSS</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarDuplicadoDebounced()"> </div>
           <input type="hidden" id="enrol-empresa" value="">
           <div class="facial-field"><label>Área</label><input type="text" id="enrol-area" placeholder="Área"></div>
           <div class="facial-field"><label>Cargo</label><input type="text" id="enrol-cargo" placeholder="Cargo"></div>
@@ -796,32 +796,12 @@ function verificarDuplicadoDebounced() {
     }
   }
 
-  const nombre    = document.getElementById('enrol-nombre')?.value?.trim()    || '';
-  const apellido  = document.getElementById('enrol-apellido')?.value?.trim()  || '';
-  const documento = document.getElementById('enrol-documento')?.value?.trim() || '';
-  const nss       = document.getElementById('enrol-nss')?.value?.trim()       || '';
-
-  const warnDatos = document.getElementById('warn-datos');
-  const errores = [];
-  if (!nombre)    errores.push('Nombre(s)');
-  if (!apellido)  errores.push('Apellidos');
-  if (!documento) errores.push('Número de empleado');
-  if (!nss)       errores.push('NSS');
-  if (warnDatos) {
-    if (errores.length) {
-      warnDatos.style.display = 'flex';
-      warnDatos.textContent = `Campos obligatorios sin llenar: ${errores.join(', ')}`;
-    } else {
-      warnDatos.style.display = 'none';
-    }
-  }
-
   const btn = document.getElementById('btn-enrol-guardar');
   if (!btn) return;
-  const listo = tieneFoto && tieneCred && nombreCoincide && !enrolDuplicado && errores.length === 0;
-
+  const listo = tieneFoto && tieneCred && nombreCoincide && !enrolDuplicado;
+  
   btn.disabled = !listo;
-  btn.textContent = 'REGISTRAR PERSONAL';
+  btn.textContent = 'REGISTRAR PERSONAL'; // ← agrega esta línea
   btn.style.opacity = '1';
   btn.style.background = listo ? 'var(--success)' : 'var(--text-3)';
   btn.style.color = listo ? '#fff' : '#999';
