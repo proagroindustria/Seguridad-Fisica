@@ -169,12 +169,9 @@ async function verificarPersonalOcupado(rowId, nombre) {
   _personalTimeouts[rowId] = setTimeout(async () => {
     try {
       const filaActual = (seccionesAgregadas['personal'] || []).find(f => f._id === rowId);
-      const nss = filaActual?._nss || '';
-      const credInput = document.getElementById(`inp-${rowId}-num_credencial`);
-      const numCred = credInput ? credInput.value.trim() : '';
+      const trabajadorId = filaActual?._empleadoId || '';
       const params = new URLSearchParams({ nombre: nombre.trim() });
-      if (nss) params.append('nss', nss);
-      if (numCred) params.append('num_credencial', numCred);
+      if (trabajadorId) params.append('trabajador_id', trabajadorId);
       const resp = await fetch(`/solicitudes/verificar-personal?${params}`);
       const data = await resp.json();
       const rowEl = document.getElementById(`row-${rowId}`);

@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS permiso_personal (
     categoria      VARCHAR(100),
     observaciones  TEXT,
     nss            VARCHAR(20),
+    trabajador_id  INTEGER,
     liberado       BOOLEAN      NOT NULL DEFAULT FALSE,
     creado_en      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
