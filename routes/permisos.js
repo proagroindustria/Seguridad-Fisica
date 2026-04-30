@@ -649,17 +649,29 @@ router.get('/verificar-personal', requireAuth, async (req, res) => {
       const nssNuevo  = (nss           || '').trim().toLowerCase();
       const credNuevo = (num_credencial || '').trim().toLowerCase();
 
+      // Solo se puede concluir "persona diferente" si AMBOS lados tienen el mismo tipo de
+      // identificador y difieren. Si el registro existente tiene NULL en ese campo, no se
+      // puede comparar y se mantiene el bloqueo por seguridad.
+
       if (nssNuevo) {
-        // NSS es único: si ningún registro coincide con el NSS dado → persona diferente
-        const mismaPorNss = r.rows.some(row => (row.nss || '').trim().toLowerCase() === nssNuevo);
-        if (!mismaPorNss) return res.json({ ocupado: false });
-      } else if (credNuevo) {
-        // Sin NSS, usar num_credencial como respaldo
-        const mismaPorCred = r.rows.some(row => {
-          const credExistente = (row.num_credencial || '').trim().toLowerCase();
-          return credExistente && credExistente === credNuevo;
-        });
-        if (!mismaPorCred) return res.json({ ocupado: false });
+        const existenteConNss = r.rows.find(row => (row.nss || '').trim());
+        if (existenteConNss) {
+          // Al menos un registro tiene NSS → comparar
+          const hayCoincidencia = r.rows.some(row => (row.nss || '').trim().toLowerCase() === nssNuevo);
+          if (!hayCoincidencia) return res.json({ ocupado: false });
+          // Hay coincidencia de NSS → misma persona → bloquear (caer al final)
+        }
+        // Ningún registro existente tiene NSS → no se puede comparar → seguir con credencial
+      }
+
+      if (credNuevo) {
+        const existenteConCred = r.rows.find(row => (row.num_credencial || '').trim());
+        if (existenteConCred) {
+          const hayCoincidencia = r.rows.some(row => (row.num_credencial || '').trim().toLowerCase() === credNuevo);
+          if (!hayCoincidencia) return res.json({ ocupado: false });
+          // Hay coincidencia de credencial → misma persona → bloquear (caer al final)
+        }
+        // Ningún registro existente tiene credencial → no se puede comparar
       }
 
       const s = r.rows[0];
