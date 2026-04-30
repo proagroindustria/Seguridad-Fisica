@@ -648,34 +648,29 @@ router.get('/verificar-personal', requireAuth, async (req, res) => {
     if (r.rows.length > 0) {
       const nssNuevo  = (nss           || '').trim().toLowerCase();
       const credNuevo = (num_credencial || '').trim().toLowerCase();
-
-      // Solo se puede concluir "persona diferente" si AMBOS lados tienen el mismo tipo de
-      // identificador y difieren. Si el registro existente tiene NULL en ese campo, no se
-      // puede comparar y se mantiene el bloqueo por seguridad.
+      let confirmadoPorIdentificador = false;
 
       if (nssNuevo) {
         const existenteConNss = r.rows.find(row => (row.nss || '').trim());
         if (existenteConNss) {
-          // Al menos un registro tiene NSS → comparar
           const hayCoincidencia = r.rows.some(row => (row.nss || '').trim().toLowerCase() === nssNuevo);
           if (!hayCoincidencia) return res.json({ ocupado: false });
-          // Hay coincidencia de NSS → misma persona → bloquear (caer al final)
+          confirmadoPorIdentificador = true;
         }
-        // Ningún registro existente tiene NSS → no se puede comparar → seguir con credencial
       }
 
-      if (credNuevo) {
+      if (!confirmadoPorIdentificador && credNuevo) {
         const existenteConCred = r.rows.find(row => (row.num_credencial || '').trim());
         if (existenteConCred) {
           const hayCoincidencia = r.rows.some(row => (row.num_credencial || '').trim().toLowerCase() === credNuevo);
           if (!hayCoincidencia) return res.json({ ocupado: false });
-          // Hay coincidencia de credencial → misma persona → bloquear (caer al final)
+          confirmadoPorIdentificador = true;
         }
-        // Ningún registro existente tiene credencial → no se puede comparar
       }
 
       const s = r.rows[0];
-      return res.json({ ocupado: true, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
+      // solo_nombre: true → coincidencia solo por nombre, sin identificador que lo confirme
+      return res.json({ ocupado: true, solo_nombre: !confirmadoPorIdentificador, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
     }
     res.json({ ocupado: false });
   } catch(e) {
