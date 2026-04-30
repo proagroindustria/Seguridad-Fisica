@@ -642,7 +642,8 @@ router.get('/verificar-personal', requireAuth, async (req, res) => {
        FROM permiso_personal pp
        JOIN permisos p ON p.id = pp.permiso_id
        WHERE LOWER(TRIM(pp.nombre)) = LOWER(TRIM($1))
-         AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')`,
+         AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
+         AND pp.liberado = FALSE`,
       [nombre]
     );
     if (r.rows.length > 0) {
