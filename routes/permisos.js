@@ -650,11 +650,13 @@ router.get('/verificar-personal', requireAuth, async (req, res) => {
       const credNuevo = (num_credencial || '').trim().toLowerCase();
       let confirmadoPorIdentificador = false;
 
+      let rowCoincidente = null;
+
       if (nssNuevo) {
         const existenteConNss = r.rows.find(row => (row.nss || '').trim());
         if (existenteConNss) {
-          const hayCoincidencia = r.rows.some(row => (row.nss || '').trim().toLowerCase() === nssNuevo);
-          if (!hayCoincidencia) return res.json({ ocupado: false });
+          rowCoincidente = r.rows.find(row => (row.nss || '').trim().toLowerCase() === nssNuevo) || null;
+          if (!rowCoincidente) return res.json({ ocupado: false });
           confirmadoPorIdentificador = true;
         }
       }
@@ -662,13 +664,13 @@ router.get('/verificar-personal', requireAuth, async (req, res) => {
       if (!confirmadoPorIdentificador && credNuevo) {
         const existenteConCred = r.rows.find(row => (row.num_credencial || '').trim());
         if (existenteConCred) {
-          const hayCoincidencia = r.rows.some(row => (row.num_credencial || '').trim().toLowerCase() === credNuevo);
-          if (!hayCoincidencia) return res.json({ ocupado: false });
+          rowCoincidente = r.rows.find(row => (row.num_credencial || '').trim().toLowerCase() === credNuevo) || null;
+          if (!rowCoincidente) return res.json({ ocupado: false });
           confirmadoPorIdentificador = true;
         }
       }
 
-      const s = r.rows[0];
+      const s = rowCoincidente || r.rows[0];
       // solo_nombre: true → coincidencia solo por nombre, sin identificador que lo confirme
       return res.json({ ocupado: true, solo_nombre: !confirmadoPorIdentificador, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
     }
