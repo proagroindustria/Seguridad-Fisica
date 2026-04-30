@@ -479,7 +479,7 @@ router.post('/', requireAuth, async (req, res) => {
     const folio = `SOL-${new Date().getFullYear()}-${String(newId).padStart(4,'0')}`;
     const r2 = await pool.query('UPDATE permisos SET folio=$1 WHERE id=$2 RETURNING *', [folio, newId]);
     const solicitud = r2.rows[0]; const pid = solicitud.id; const sec = secciones||{};
-    if (sec.personal&&Array.isArray(sec.personal)) { for (const p of sec.personal) { if (!p.nombre&&!p.num_credencial) continue; await pool.query(`INSERT INTO permiso_personal (permiso_id, num_credencial, nombre, categoria, observaciones, nss, documento, documento_nombre_extraido, documento_validado) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [pid, p.num_credencial||null, p.nombre||null, p.categoria||null, p.observaciones||null, p._nss||null, p.documento_ine||p.documento||null, p._nombreExtraido||null, p._docInlineValidado===true]); } }
+    if (sec.personal&&Array.isArray(sec.personal)) { for (const p of sec.personal) { if (!p.nombre&&!p.num_credencial) continue; await pool.query(`INSERT INTO permiso_personal (permiso_id, num_credencial, nombre, categoria, observaciones, nss, trabajador_id, documento, documento_nombre_extraido, documento_validado) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [pid, p.num_credencial||null, p.nombre||null, p.categoria||null, p.observaciones||null, p._nss||null, p._empleadoId||null, p.documento_ine||p.documento||null, p._nombreExtraido||null, p._docInlineValidado===true]); } }
 
     // Pase de Visita: registrar cada persona como invitado en reconocimiento_db y generar su QR
     if (es_pase_visita === true && sec.personal && Array.isArray(sec.personal)) {
@@ -634,47 +634,44 @@ router.get('/:id/accesos', requireAuth, async (req, res) => {
 
 // GET /verificar-personal — debe ir ANTES de /:id
 router.get('/verificar-personal', requireAuth, async (req, res) => {
-  const { nombre, nss, num_credencial } = req.query;
-  if (!nombre) return res.json({ ocupado: false });
+  const { nombre, trabajador_id } = req.query;
+  if (!nombre && !trabajador_id) return res.json({ ocupado: false });
   try {
-    const r = await pool.query(
-      `SELECT pp.nombre, pp.nss, pp.num_credencial, p.folio, p.empresa, p.estado, p.fecha_fin
-       FROM permiso_personal pp
-       JOIN permisos p ON p.id = pp.permiso_id
-       WHERE LOWER(TRIM(pp.nombre)) = LOWER(TRIM($1))
-         AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
-         AND pp.liberado = FALSE`,
-      [nombre]
-    );
-    if (r.rows.length > 0) {
-      const nssNuevo  = (nss           || '').trim().toLowerCase();
-      const credNuevo = (num_credencial || '').trim().toLowerCase();
-      let confirmadoPorIdentificador = false;
-
-      let rowCoincidente = null;
-
-      if (nssNuevo) {
-        const existenteConNss = r.rows.find(row => (row.nss || '').trim());
-        if (existenteConNss) {
-          rowCoincidente = r.rows.find(row => (row.nss || '').trim().toLowerCase() === nssNuevo) || null;
-          if (!rowCoincidente) return res.json({ ocupado: false });
-          confirmadoPorIdentificador = true;
-        }
+    // Verificación primaria: por trabajador_id (único e inequívoco)
+    if (trabajador_id) {
+      const r = await pool.query(
+        `SELECT p.folio, p.empresa, p.estado, p.fecha_fin
+         FROM permiso_personal pp
+         JOIN permisos p ON p.id = pp.permiso_id
+         WHERE pp.trabajador_id = $1
+           AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
+           AND pp.liberado = FALSE`,
+        [parseInt(trabajador_id)]
+      );
+      if (r.rows.length > 0) {
+        const s = r.rows[0];
+        return res.json({ ocupado: true, solo_nombre: false, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
       }
-
-      if (!confirmadoPorIdentificador && credNuevo) {
-        const existenteConCred = r.rows.find(row => (row.num_credencial || '').trim());
-        if (existenteConCred) {
-          rowCoincidente = r.rows.find(row => (row.num_credencial || '').trim().toLowerCase() === credNuevo) || null;
-          if (!rowCoincidente) return res.json({ ocupado: false });
-          confirmadoPorIdentificador = true;
-        }
-      }
-
-      const s = rowCoincidente || r.rows[0];
-      // solo_nombre: true → coincidencia solo por nombre, sin identificador que lo confirme
-      return res.json({ ocupado: true, solo_nombre: !confirmadoPorIdentificador, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
+      return res.json({ ocupado: false });
     }
+
+    // Sin trabajador_id: solo avisar por nombre, nunca bloquear
+    if (nombre) {
+      const r = await pool.query(
+        `SELECT p.folio, p.empresa, p.estado, p.fecha_fin
+         FROM permiso_personal pp
+         JOIN permisos p ON p.id = pp.permiso_id
+         WHERE LOWER(TRIM(pp.nombre)) = LOWER(TRIM($1))
+           AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
+           AND pp.liberado = FALSE`,
+        [nombre]
+      );
+      if (r.rows.length > 0) {
+        const s = r.rows[0];
+        return res.json({ ocupado: true, solo_nombre: true, folio: s.folio, empresa: s.empresa, estado: s.estado, fecha_fin: s.fecha_fin });
+      }
+    }
+
     res.json({ ocupado: false });
   } catch(e) {
     console.error('[verificar-personal] ERROR:', e.message);

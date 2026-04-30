@@ -421,6 +421,10 @@ poolMigration.query(
   `ALTER TABLE permiso_personal ADD COLUMN IF NOT EXISTS liberado BOOLEAN NOT NULL DEFAULT FALSE`
 ).catch(e => console.warn('[migration] permiso_personal.liberado:', e.message));
 
+poolMigration.query(
+  `ALTER TABLE permiso_personal ADD COLUMN IF NOT EXISTS trabajador_id INTEGER`
+).catch(e => console.warn('[migration] permiso_personal.trabajador_id:', e.message));
+
 app.listen(PORT, () => {
   console.log(`\n🌱 PROAGRO - Sistema de Permisos`);
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
