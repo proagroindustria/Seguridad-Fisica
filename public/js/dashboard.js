@@ -1,6 +1,9 @@
-/* =====================================================
-   PROAGRO - Dashboard JS
-===================================================== */
+
+/* 
+  =====================================================
+        PROAGRO - Dashboard JS
+  =====================================================
+*/
 
 
 
@@ -150,13 +153,21 @@ async function verificarPersonalOcupado(rowId, nombre) {
       }
 
       if (data.ocupado) {
-        avisoEl.style.color = 'var(--danger)';
-        avisoEl.textContent = `⛔ Ya está en ${data.folio} (${data.estado}) · vence ${formatFecha(data.fecha_fin)}`;
         const inp = document.getElementById(`inp-${rowId}-nombre`);
-        if (inp) { inp.style.borderColor = 'var(--danger)'; inp.style.background = 'rgba(239,68,68,0.05)'; }
         const filas = seccionesAgregadas['personal'] || [];
         const fila = filas.find(f => f._id === rowId);
-        if (fila) fila._bloqueado = true;
+        if (isPaseVisitaActive()) {
+          // En pase de visita solo advertir — pueden existir dos personas distintas con el mismo nombre
+          avisoEl.style.color = 'var(--warning)';
+          avisoEl.textContent = `⚠ Hay un ${data.folio} activo con este nombre — confirma que es otra persona`;
+          if (inp) { inp.style.borderColor = 'var(--warning)'; inp.style.background = 'rgba(245,158,11,0.05)'; }
+          if (fila) fila._bloqueado = false;
+        } else {
+          avisoEl.style.color = 'var(--danger)';
+          avisoEl.textContent = `⛔ Ya está en ${data.folio} (${data.estado}) · vence ${formatFecha(data.fecha_fin)}`;
+          if (inp) { inp.style.borderColor = 'var(--danger)'; inp.style.background = 'rgba(239,68,68,0.05)'; }
+          if (fila) fila._bloqueado = true;
+        }
         verificarBotonSubmit();
       } else {
         avisoEl.textContent = '';
@@ -3829,9 +3840,5 @@ async function extenderPermiso(solicitudId) {
     if (statusEl) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = '❌ ' + e.message; }
   }
 }
-
-
-
-
 
 
