@@ -145,7 +145,7 @@ async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
   const rSol = await pool.query(`SELECT * FROM permisos WHERE id = $1`, [solicitudId]);
   if (!rSol.rows.length) return;
   const sol = rSol.rows[0];
-  const rPersonal = await pool.query(`SELECT pp.nombre, pp.num_credencial, pp.categoria FROM permiso_personal pp WHERE pp.permiso_id = $1`, [solicitudId]);
+  const rPersonal = await pool.query(`SELECT pp.nombre, pp.num_credencial, pp.categoria, pp.trabajador_id FROM permiso_personal pp WHERE pp.permiso_id = $1`, [solicitudId]);
   if (!rPersonal.rows.length) return;
   const fechaInicio = sol.fecha_inicio ? new Date(sol.fecha_inicio).toLocaleDateString('es-MX') : '';
   const fechaFin    = sol.fecha_fin    ? new Date(sol.fecha_fin).toLocaleDateString('es-MX')    : '';
@@ -163,11 +163,25 @@ async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
     const col = (i % 8) % cols, row = Math.floor((i % 8) / cols);
     const cX = marginX + col * (cW + colGap), cY = marginY + row * (cH + rowGap);
     let curp = p.num_credencial || '';
+    let trabajadorIdParaQR = p.trabajador_id || null;
+    let idPersonal = null;
     try {
-      const rT = await poolFacial.query(`SELECT documento_identidad FROM trabajadores WHERE LOWER(nombre || ' ' || apellido) = LOWER($1) LIMIT 1`, [p.nombre]);
-      if (rT.rows.length) curp = rT.rows[0].documento_identidad || curp;
+      if (p.trabajador_id) {
+        const rT = await poolFacial.query(`SELECT documento_identidad, id_personal FROM trabajadores WHERE id = $1 LIMIT 1`, [p.trabajador_id]);
+        if (rT.rows.length) {
+          curp = rT.rows[0].documento_identidad || curp;
+          idPersonal = rT.rows[0].id_personal || null;
+        }
+      } else {
+        const rT = await poolFacial.query(`SELECT id, documento_identidad, id_personal FROM trabajadores WHERE LOWER(nombre || ' ' || apellido) = LOWER($1) LIMIT 1`, [p.nombre]);
+        if (rT.rows.length) {
+          curp = rT.rows[0].documento_identidad || curp;
+          trabajadorIdParaQR = rT.rows[0].id || null;
+          idPersonal = rT.rows[0].id_personal || null;
+        }
+      }
     } catch(e) {}
-    const qrBuffer = await QRCode.toBuffer(JSON.stringify({ folio: sol.folio || String(solicitudId), nombre: p.nombre, curp, empresa: sol.empresa || '', fecha_inicio: fechaInicio, fecha_fin: fechaFin, valido: true }), { width: 100, margin: 1 });
+    const qrBuffer = await QRCode.toBuffer(JSON.stringify({ folio: sol.folio || String(solicitudId), nombre: p.nombre, curp, trabajador_id: trabajadorIdParaQR, id_personal: idPersonal, empresa: sol.empresa || '', fecha_inicio: fechaInicio, fecha_fin: fechaFin, valido: true }), { width: 100, margin: 1 });
     doc.rect(cX, cY, cW, cH).lineWidth(1.5).stroke('#1a1a1a');
     doc.rect(cX, cY, cW, 22).fill('#c9a227');
     doc.fillColor('#fff').font('Helvetica-Bold').fontSize(7).text('PROAGRO INDUSTRIA — PASE DE ACCESO', cX, cY + 7, { width: cW, align: 'center' });
@@ -847,7 +861,7 @@ router.get('/:id/credenciales', requireAuth, async (req, res) => {
     const rSol=await pool.query('SELECT folio FROM permisos WHERE id=$1',[id]); if (!rSol.rows.length) return res.status(404).json({ error:'No encontrado' });
     const folio=rSol.rows[0].folio||String(id);
     const filePath=path.join(__dirname,'..','public','credenciales',`credenciales_${folio}.pdf`);
-    if (!fs.existsSync(filePath)) await generarPDFCredenciales(pool, poolFacial, id);
+    await generarPDFCredenciales(pool, poolFacial, id);
     res.download(filePath);
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
