@@ -824,7 +824,7 @@ router.put('/empleados/:id/liberar', requireAuth, async (req, res) => {
 
   try {
     const r = await poolFacial.query(
-      `SELECT id, nombre, apellido, area, empresa FROM trabajadores WHERE id = $1`,
+      `SELECT id, nombre, apellido, area, empresa, imss_nss FROM trabajadores WHERE id = $1`,
       [req.params.id]
     );
     if (!r.rows.length)
@@ -832,6 +832,30 @@ router.put('/empleados/:id/liberar', requireAuth, async (req, res) => {
 
     const t = r.rows[0];
     const nombreCompleto = `${t.nombre} ${t.apellido}`;
+
+    // Marcar registros de permiso_personal como liberados (por NSS si existe, sino por nombre)
+    try {
+      const nssWorker = (t.imss_nss || '').trim();
+      if (nssWorker) {
+        await poolSolicitudes.query(
+          `UPDATE permiso_personal SET liberado = TRUE WHERE nss = $1`,
+          [nssWorker]
+        );
+      } else {
+        await poolSolicitudes.query(
+          `UPDATE permiso_personal SET liberado = TRUE
+           WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))
+             AND EXISTS (
+               SELECT 1 FROM permisos p
+               WHERE p.id = permiso_id
+                 AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
+             )`,
+          [nombreCompleto]
+        );
+      }
+    } catch(eLiberado) {
+      console.warn('[liberar] No se pudo marcar permiso_personal:', eLiberado.message);
+    }
 
     // Guardar snapshot en accesos que aún no lo tienen
     await poolFacial.query(
