@@ -7,6 +7,13 @@
 
 
 
+/* 
+  =====================================================
+        PROAGRO - Dashboard JS PRUEBA DE CAMBIOS REFELJADOS
+  =====================================================
+*/
+
+
 let todosSolicitudes = [];
 let responsablesCache = [];
 let filtroActual = 'todos';
