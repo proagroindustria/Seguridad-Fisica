@@ -3,10 +3,6 @@ const router    = express.Router();
 const { Pool }  = require('pg');
 const axios     = require('axios');
 const sharp     = require('sharp');
-const pdfjsLib  = require('pdfjs-dist/legacy/build/pdf.js');
-const { createCanvas } = require('canvas');
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = false;
 
 const poolDoc = new Pool({
   host:     process.env.DB_HOST,
