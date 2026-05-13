@@ -241,11 +241,41 @@ html, body {
 .mono-text { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.1em; }
 .footer-sep { color: var(--border-light); }
 
-/* RESPONSIVE */
+/* ===================== RESPONSIVE ===================== */
+
+/* --- Tablet (≤ 900px): layout vertical --- */
 @media (max-width: 900px) {
   .login-container { flex-direction: column; overflow-y: auto; }
   html, body { overflow: auto; }
-  .brand-panel { width: 100%; padding: 40px 32px; border-right: none; border-bottom: 3px solid var(--accent); }
+  .brand-panel {
+    width: 100%; padding: 40px 32px;
+    border-right: none; border-bottom: 3px solid var(--accent);
+  }
   .brand-panel::before, .brand-panel::after { display: none; }
   .form-panel { padding: 40px 32px; max-width: 100%; }
+}
+
+/* --- Móvil (≤ 600px): compactar paneles --- */
+@media (max-width: 600px) {
+  .brand-panel { padding: 24px 20px; }
+  .brand-name { font-size: 40px; }
+  .brand-desc { display: none; }
+  .brand-subtitle { font-size: 10px; }
+  .brand-divider { margin-bottom: 16px; }
+  .form-panel { padding: 28px 20px; }
+  .form-title { font-size: 30px; }
+  .form-header { margin-bottom: 28px; }
+}
+
+/* --- Teléfono pequeño (≤ 400px): todo más compacto --- */
+@media (max-width: 400px) {
+  .brand-panel { padding: 18px 14px; }
+  .brand-name { font-size: 32px; }
+  .logo-mark { width: 52px; height: 52px; }
+  .logo-mark span { font-size: 26px; }
+  .form-panel { padding: 20px 14px; }
+  .form-title { font-size: 26px; }
+  .field-input { font-size: 14px; padding: 12px 12px 12px 40px; }
+  .btn-login { font-size: 14px; padding: 14px 16px; clip-path: none; }
+  .field-group { margin-bottom: 18px; }
 }
