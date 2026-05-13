@@ -1,8 +1,12 @@
-const express  = require('express');
-const router   = express.Router();
-const { Pool } = require('pg');
-const axios    = require('axios');
-const sharp    = require('sharp');
+const express   = require('express');
+const router    = express.Router();
+const { Pool }  = require('pg');
+const axios     = require('axios');
+const sharp     = require('sharp');
+const pdfjsLib  = require('pdfjs-dist/legacy/build/pdf.js');
+const { createCanvas } = require('canvas');
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = false;
 
 const poolDoc = new Pool({
   host:     process.env.DB_HOST,
@@ -12,33 +16,40 @@ const poolDoc = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
-// Comprimir imagen antes de enviar a n8n (máx 1.2 MB)
+// Comprimir imagen antes de enviar a n8n (máx 1.0 MB para imágenes, PDFs pasan si caben)
 async function comprimirBase64(base64, mime) {
-  if (mime === 'application/pdf') return { base64, mime };
+  // PDFs: validar tamaño y pasar sin modificar (nginx limite ~1.2 MB)
+  if (mime === 'application/pdf') {
+    const sizeKB = Math.round(base64.length * 3 / 4 / 1024);
+    if (sizeKB > 1100) console.warn(`[COMPRESS] PDF grande: ${sizeKB} KB — puede ser rechazado por nginx`);
+    return { base64, mime };
+  }
   try {
-    const buffer  = Buffer.from(base64, 'base64');
-    const MAX     = 800 * 1024; // 800 KB — bien por debajo del límite de nginx
-    let quality   = 80;
-    const maxDim  = 1200; // reducir dimensión máxima
+    const buffer = Buffer.from(base64, 'base64');
+    const MAX    = 1000 * 1024; // 1.0 MB — seguro bajo límite nginx
+    let quality  = 88;
+    const maxDim = 1800; // mayor resolución para que GPT-4o lea texto correctamente
 
+    // 4:4:4 preserva mucho mejor el texto que 4:2:0
     let result = await sharp(buffer)
       .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality, chromaSubsampling: '4:2:0' })
+      .jpeg({ quality, chromaSubsampling: '4:4:4' })
       .toBuffer();
 
-    while (result.length > MAX && quality >= 40) {
-      quality -= 10;
+    // Reducir calidad de a 5 pero nunca bajar de 65 (por debajo el texto se distorsiona)
+    while (result.length > MAX && quality > 65) {
+      quality -= 5;
       result = await sharp(buffer)
         .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality })
+        .jpeg({ quality, chromaSubsampling: '4:4:4' })
         .toBuffer();
     }
 
-    // Si sigue siendo grande, reducir dimensión también
+    // Último recurso: reducir dimensión pero mantener calidad legible
     if (result.length > MAX) {
       result = await sharp(buffer)
-        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 50 })
+        .resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 70, chromaSubsampling: '4:4:4' })
         .toBuffer();
     }
 

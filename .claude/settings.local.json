@@ -3,7 +3,34 @@
     "allow": [
       "Bash(grep -v \"^--$\")",
       "Bash(sed 's/.*SELECT //')",
-      "Bash(sed 's/ FROM trabajadores.*//')"
+      "Bash(sed 's/ FROM trabajadores.*//')",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit(**.js)",
+      "Edit(**.ejs)",
+      "Write(**.js)",
+      "Write(**.ejs)",
+      "Bash(npm *)",
+      "Bash(node *)"
     ]
+  },
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:/Users/diego.ramirez/Downloads/permisos-app"
+      ]
+    }
+  },
+  "skillOverrides": {
+    "claude-api": "off",
+    "keybindings-help": "off",
+    "loop": "off",
+    "schedule": "off"
   }
 }
