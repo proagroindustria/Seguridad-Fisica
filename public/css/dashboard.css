@@ -1097,14 +1097,123 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
 }
 .pase-visita-badge.visible { display: inline-flex; align-items: center; }
 
-/* RESPONSIVE */
+/* ===================== CAM-DOC-BTN ===================== */
+/* Botón "TOMAR FOTO" — solo en pantallas táctiles (móvil) */
+.cam-doc-btn {
+  display: none; /* oculto por defecto (desktop) */
+  align-items: center; gap: 6px;
+  background: var(--bg-2); color: var(--accent);
+  border: 1px solid rgba(245,166,35,0.5);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700; font-size: 11px; letter-spacing: 0.1em;
+  padding: 5px 10px; cursor: pointer; transition: all 0.15s;
+  white-space: nowrap;
+}
+.cam-doc-btn:hover { background: var(--accent); color: var(--black); }
+
+/* Solo visible en dispositivos táctiles */
+@media (hover: none) and (pointer: coarse) {
+  .cam-doc-btn { display: inline-flex; }
+}
+
+/* ===================== RESPONSIVE ===================== */
+
+/* --- Tablet (≤ 768px) --- */
 @media (max-width: 768px) {
-  .page-content { padding: 16px; }
+  /* Layout */
+  .page-content { padding: 16px; gap: 14px; }
   .form-row { grid-template-columns: 1fr; }
   .stats-bar { display: none; }
   .section-title { font-size: 24px; }
-  .data-table { font-size: 12px; }
+  .section-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .section-actions { flex-wrap: wrap; justify-content: flex-start; }
+
+  /* Topbar */
+  .topbar-section { display: none; }
+  .topbar-sep { display: none; }
+  .topbar-username { display: none; }
+
+  /* Table - scroll horizontal */
+  .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .data-table { font-size: 12px; min-width: 580px; }
   .data-table th, .data-table td { padding: 10px 10px; }
+
+  /* Filter bar */
+  .filter-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .search-box { min-width: unset; }
+  .filter-chips { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; scrollbar-width: thin; }
+  .filter-chips::-webkit-scrollbar { height: 3px; }
+
+  /* Modal */
+  .modal-overlay { padding: 10px; }
   .modal-box-xl { max-width: 100%; }
+  .modal-form { padding: 16px 20px; }
+  .modal-header { padding: 16px 20px; }
+  .modal-footer { flex-wrap: wrap; }
+  .submodal-overlay { padding: 10px; }
+
+  /* Detalle */
+  .detalle-section { padding: 14px 16px; }
+  .detalle-grid { grid-template-columns: 1fr 1fr; }
+
+  /* DnD */
+  .dnd-form-row { grid-template-columns: 1fr; }
   .dnd-palette { gap: 6px; }
+
+  /* Facial */
+  .facial-form-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Móvil (≤ 480px) --- */
+@media (max-width: 480px) {
+  /* Layout */
+  .page-content { padding: 12px; gap: 12px; }
+  .topbar { padding: 0 12px; }
+  .topbar-title { font-size: 15px; letter-spacing: 0.04em; }
+  .section-title { font-size: 20px; }
+
+  /* Modal al fondo como sheet */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal-box, .modal-box-xl {
+    max-width: 100%;
+    width: 100%;
+    max-height: 95vh;
+    border-radius: 0;
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .modal-header { padding: 14px 16px; }
+  .modal-form { padding: 14px 16px; }
+  .modal-title { font-size: 20px; }
+  .detalle-body { max-height: calc(95vh - 72px); }
+
+  /* Detalle 1 columna en teléfono */
+  .detalle-grid { grid-template-columns: 1fr; }
+  .detalle-section { padding: 12px 14px; }
+
+  /* Submodal al fondo como sheet */
+  .submodal-overlay { padding: 0; align-items: flex-end; }
+  .submodal-box { max-width: 100%; width: 100%; max-height: 90vh; }
+  .submodal-header { padding: 14px 16px; }
+  .submodal-body { padding: 16px; }
+  .submodal-footer { padding: 12px 16px; flex-wrap: wrap; }
+
+  /* DnD palette vertical */
+  .dnd-palette { flex-direction: column; }
+  .dnd-card-source {
+    min-width: unset;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  .dnd-card-info { text-align: left; }
+
+  /* Botón primario sin clip-path (evita que el área táctil se recorte) */
+  .btn-primary { clip-path: none; padding: 10px 16px; }
+
+  /* Facial caja full width */
+  .facial-box { max-width: 100%; width: 100%; }
+
+  /* Tabla detalle con scroll */
+  .detalle-table th, .detalle-table td { padding: 7px 8px; font-size: 12px; }
 }

@@ -2674,11 +2674,37 @@ async function abrirFacialVerificar() {
   if (!facialModelos) { statusEl.className = 'facial-status warn'; statusEl.textContent = '⏳ Cargando modelos faciales...'; facialModelos = await Facial.cargarModelos(); }
   const ok = await Facial.iniciarCamara('verif-video', 'verif-canvas');
   if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
-  
-  Facial.iniciarDeteccion(
-  () => { statusEl.className = 'facial-status ok'; statusEl.textContent = '✅ Rostro detectado — listo para verificar'; const b = document.getElementById('btn-verif-capturar'); if(b) b.disabled = false; },
-  () => { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ Sin rostro — colócate frente a la cámara'; const b = document.getElementById('btn-verif-capturar'); if(b) b.disabled = true; }
 
+  // Reiniciar guía oval sin auto-disparo (el usuario presiona el botón)
+  if (typeof FaceGuide !== 'undefined') FaceGuide.reiniciar(null);
+
+  Facial.iniciarDeteccion(
+    (estado) => {
+      if (typeof FaceGuide === 'undefined') {
+        statusEl.className = 'facial-status ok';
+        statusEl.textContent = '✅ Rostro detectado — listo para verificar';
+        const b = document.getElementById('btn-verif-capturar'); if (b) b.disabled = false;
+        return;
+      }
+      const b = document.getElementById('btn-verif-capturar');
+      if (estado === 'bien') {
+        statusEl.className = 'facial-status ok';
+        statusEl.textContent = '✅ Posición correcta — presiona VERIFICAR';
+        if (b) b.disabled = false;
+      } else {
+        statusEl.className = 'facial-status ' + FaceGuide.claseEstado(estado);
+        statusEl.textContent = FaceGuide.textoEstado(estado);
+        if (b) b.disabled = true;
+      }
+    },
+    (estado) => {
+      const b = document.getElementById('btn-verif-capturar'); if (b) b.disabled = true;
+      statusEl.className = 'facial-status error';
+      statusEl.textContent = typeof FaceGuide !== 'undefined'
+        ? FaceGuide.textoEstado('sin_rostro')
+        : '❌ Sin rostro — colócate frente a la cámara';
+    },
+    typeof FaceGuide !== 'undefined' ? FaceGuide : undefined
   );
 }
 
@@ -2728,10 +2754,48 @@ if (btnGuardar) btnGuardar.disabled = true;
   if (!facialModelos) { facialModelos = await Facial.cargarModelos(); }
   const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas');
   if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
- Facial.iniciarDeteccion(
-  () => { statusEl.className = 'facial-status ok'; statusEl.textContent = '✅ Rostro detectado — listo para verificar'; const b = document.getElementById('btn-verif-capturar'); if(b) b.disabled = false; },
-  () => { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ Sin rostro — colócate frente a la cámara'; const b = document.getElementById('btn-verif-capturar'); if(b) b.disabled = true; }
-);
+
+  // Guía oval: habilita el botón capturar cuando el rostro esté bien posicionado
+  if (typeof FaceGuide !== 'undefined') {
+    FaceGuide.reiniciar(() => {
+      const b = document.getElementById('btn-enrol-capturar');
+      if (b) b.disabled = false;
+    });
+  }
+
+  Facial.iniciarDeteccion(
+    (estado) => {
+      if (typeof FaceGuide === 'undefined') {
+        statusEl.className = 'facial-status ok';
+        statusEl.textContent = '✅ Rostro detectado — presiona CAPTURAR';
+        const b = document.getElementById('btn-enrol-capturar'); if (b) b.disabled = false;
+        return;
+      }
+      if (estado === 'bien') {
+        statusEl.className = 'facial-status ok';
+        statusEl.textContent = '✅ Posición correcta — presiona CAPTURAR';
+      } else {
+        statusEl.className = 'facial-status ' + FaceGuide.claseEstado(estado);
+        statusEl.textContent = FaceGuide.textoEstado(estado);
+        // Si sale de posición, reiniciamos el contador
+        FaceGuide.contadorBien = 0;
+        FaceGuide._listo = false;
+        const b = document.getElementById('btn-enrol-capturar'); if (b) b.disabled = true;
+      }
+    },
+    (estado) => {
+      const b = document.getElementById('btn-enrol-capturar'); if (b) b.disabled = true;
+      if (typeof FaceGuide !== 'undefined') {
+        FaceGuide.contadorBien = 0;
+        FaceGuide._listo = false;
+      }
+      statusEl.className = 'facial-status error';
+      statusEl.textContent = typeof FaceGuide !== 'undefined'
+        ? FaceGuide.textoEstado('sin_rostro')
+        : '❌ Sin rostro — colócate frente a la cámara';
+    },
+    typeof FaceGuide !== 'undefined' ? FaceGuide : undefined
+  );
 }
 
 async function capturarRostroEnrol() {

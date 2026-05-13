@@ -82,7 +82,8 @@ const Facial = {
   },
 
   // ── Iniciar detección continua ────────────────────
-  iniciarDeteccion(onRostro, sinRostro) {
+  // guia (opcional): objeto FaceGuide — dibuja óvalo de proximidad
+  iniciarDeteccion(onRostro, sinRostro, guia) {
     if (this.detectionInterval) clearInterval(this.detectionInterval);
 
     this.detectionInterval = setInterval(async () => {
@@ -95,21 +96,43 @@ const Facial = {
 
         if (det) {
           if (this.canvasEl) {
-            const dims = faceapi.matchDimensions(this.canvasEl, this.videoEl, true);
-            const ctx  = this.canvasEl.getContext('2d');
-            ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
-            faceapi.draw.drawDetections(this.canvasEl,
-              faceapi.resizeResults(det, dims));
+            if (guia) {
+              // Guía oval: dibuja overlay y devuelve estado de proximidad
+              const estado = guia.dibujar(
+                this.canvasEl, det,
+                this.videoEl.videoWidth || this.canvasEl.width,
+                this.videoEl.videoHeight || this.canvasEl.height
+              );
+              if (onRostro) onRostro(estado);
+            } else {
+              const dims = faceapi.matchDimensions(this.canvasEl, this.videoEl, true);
+              const ctx  = this.canvasEl.getContext('2d');
+              ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+              faceapi.draw.drawDetections(this.canvasEl, faceapi.resizeResults(det, dims));
+              if (onRostro) onRostro();
+            }
+          } else if (onRostro) {
+            onRostro();
           }
           this.ultimoDescriptor = Array.from(det.descriptor);
-          if (onRostro) onRostro();
         } else {
           if (this.canvasEl) {
-            const ctx = this.canvasEl.getContext('2d');
-            ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+            if (guia) {
+              const estado = guia.dibujar(
+                this.canvasEl, null,
+                this.videoEl.videoWidth || this.canvasEl.width,
+                this.videoEl.videoHeight || this.canvasEl.height
+              );
+              if (sinRostro) sinRostro(estado);
+            } else {
+              const ctx = this.canvasEl.getContext('2d');
+              ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+              if (sinRostro) sinRostro();
+            }
+          } else if (sinRostro) {
+            sinRostro();
           }
           this.ultimoDescriptor = null;
-          if (sinRostro) sinRostro();
         }
       } catch(e) {}
     }, 300);
