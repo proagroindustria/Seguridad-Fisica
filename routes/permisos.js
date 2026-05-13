@@ -642,10 +642,6 @@ router.get('/:id/accesos', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ success:false, error:e.message }); }
 });
 
-
-
-
-
 // GET /verificar-personal — debe ir ANTES de /:id
 router.get('/verificar-personal', requireAuth, async (req, res) => {
   const { nombre, trabajador_id } = req.query;
@@ -787,10 +783,6 @@ router.get('/:id', requireAuth, async (req, res) => {
   } catch(e) { return res.status(500).json({ success:false, error:e.message }); }
 });
 
-
-
-
-
 // POST /:id/salida
 router.post('/:id/salida', requireAuth, async (req, res) => {
   const user = req.session.user;
@@ -805,10 +797,6 @@ router.post('/:id/salida', requireAuth, async (req, res) => {
     return res.json({ success:true, data:r.rows[0] });
   } catch(e) { return res.status(500).json({ success:false, error:e.message }); }
 });
-
-
-
-
 
 // POST /:id/lote
 router.post('/:id/lote', requireAuth, async (req, res) => {
@@ -849,10 +837,6 @@ router.post('/:id/lote', requireAuth, async (req, res) => {
     return res.json({ success:true, data:lote });
   } catch(e) { console.error('Error lote:', e.message); return res.status(500).json({ success:false, error:e.message }); }
 });
-
-
-
-
 
 // GET /:id/credenciales
 router.get('/:id/credenciales', requireAuth, async (req, res) => {
