@@ -181,25 +181,27 @@ async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
         }
       }
     } catch(e) {}
-    const qrBuffer = await QRCode.toBuffer(JSON.stringify({ folio: sol.folio || String(solicitudId), nombre: p.nombre, curp, trabajador_id: trabajadorIdParaQR, id_personal: idPersonal, empresa: sol.empresa || '', fecha_inicio: fechaInicio, fecha_fin: fechaFin, valido: true }), { width: 100, margin: 1 });
+    const qrBuffer = await QRCode.toBuffer(JSON.stringify({ folio: sol.folio || String(solicitudId), nombre: p.nombre, curp, trabajador_id: trabajadorIdParaQR, id_personal: idPersonal, empresa: sol.empresa || '', fecha_inicio: fechaInicio, fecha_fin: fechaFin, valido: true }), { width: 300, margin: 1 });
+    // Layout: izquierda = texto + válido, derecha = QR grande hasta el borde inferior
+    const half = Math.floor(cW / 2);                          // 121px
+    const bodyH = cH - 22;                                    // 131px (solo sin header, sin footer)
+    const qrSize = Math.min(half - 2, bodyH - 4);             // 119px
+    const qrX = cX + half + Math.floor((cW - half - qrSize) / 2);
+    const qrY = cY + 22 + Math.floor((bodyH - qrSize) / 2);
+    const textW = half - 12;                                   // 109px
     doc.rect(cX, cY, cW, cH).lineWidth(1.5).stroke('#1a1a1a');
     doc.rect(cX, cY, cW, 22).fill('#c9a227');
     doc.fillColor('#fff').font('Helvetica-Bold').fontSize(7).text('PROAGRO INDUSTRIA — PASE DE ACCESO', cX, cY + 7, { width: cW, align: 'center' });
-    doc.image(qrBuffer, cX + cW - 88, cY + 26, { width: 82, height: 82 });
+    doc.moveTo(cX + half, cY + 22).lineTo(cX + half, cY + cH).lineWidth(0.5).stroke('#ddd');
+    doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
     doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('TRABAJADOR', cX + 8, cY + 27);
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(8).text(p.nombre, cX + 8, cY + 36, { width: 148 });
-    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('CURP', cX + 8, cY + 58);
-    doc.fillColor('#000').font('Helvetica').fontSize(6.5).text(curp || '—', cX + 8, cY + 66, { width: 148 });
-    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('FOLIO', cX + 8, cY + 78);
-    doc.fillColor('#000').font('Helvetica').fontSize(7).text(sol.folio || String(solicitudId), cX + 8, cY + 86);
-    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('EMPRESA', cX + 8, cY + 97);
-    doc.fillColor('#000').font('Helvetica').fontSize(7).text(sol.empresa || '—', cX + 8, cY + 105, { width: 148 });
-    doc.rect(cX, cY + cH - 22, cW, 22).fill('#f5f5f5');
-    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text(`VÁLIDO: ${fechaInicio} — ${fechaFin}`, cX, cY + cH - 13, { width: cW, align: 'center' });
-    if (sol.firma_creacion_ip) {
-      doc.fillColor('#888').font('Helvetica').fontSize(5)
-         .text(`Firma: ${sol.firma_creacion_usuario||sol.firma_creacion_ip} · ${sol.firma_creacion_ubicacion||'—'} · ${sol.firma_creacion_fecha ? new Date(sol.firma_creacion_fecha).toLocaleString('es-MX') : '—'}`, cX + 4, cY + cH - 30, { width: cW - 8 });
-    }
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(8).text(p.nombre, cX + 8, cY + 36, { width: textW });
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('FOLIO', cX + 8, cY + 60);
+    doc.fillColor('#000').font('Helvetica').fontSize(7).text(sol.folio || String(solicitudId), cX + 8, cY + 69);
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('EMPRESA', cX + 8, cY + 82);
+    doc.fillColor('#000').font('Helvetica').fontSize(7).text(sol.empresa || '—', cX + 8, cY + 91, { width: textW });
+    doc.fillColor('#555').font('Helvetica-Bold').fontSize(6).text('VÁLIDO', cX + 8, cY + 110);
+    doc.fillColor('#000').font('Helvetica').fontSize(6.5).text(`${fechaInicio} — ${fechaFin}`, cX + 8, cY + 119, { width: textW });
   }
   doc.end();
   await new Promise((res, rej) => { stream.on('finish', res); stream.on('error', rej); });

@@ -2733,7 +2733,7 @@ async function abrirFacialEnrolar() {
   document.getElementById('modalEnrolar').classList.add('open');
   document.body.style.overflow = 'hidden';
   facialDescriptorEnrol = null;
-  ['enrol-nombre','enrol-apellido','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-empresa','enrol-area','enrol-cargo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['enrol-nombre_completo','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-empresa','enrol-area','enrol-cargo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('enrol-pendiente-id').textContent = '';
   if (window._userRol === 'contratista' && window._userEmpresa) { document.getElementById('enrol-empresa').value = window._userEmpresa; }
   const statusEl = document.getElementById('enrol-status');
@@ -3009,46 +3009,15 @@ async function procesarDocEnrol(file, tipo) {
       }
 
      
-      // ── Validar coincidencia de nombre ──
-      const nombreForm   = normalizar(document.getElementById('enrol-nombre')?.value?.trim() || '');
-      const apellidoForm = normalizar(document.getElementById('enrol-apellido')?.value?.trim() || '');
-
-
-
-      
-
-      // Del doc: nombre completo = nombre + apellido_paterno + apellido_materno
-      const nombreDocCompleto   = normalizar(nombreDoc);
-      const apellidoDocCompleto = normalizar([
-        ext.apellido_paterno || '',
-        ext.apellido_materno || ''
-      ].filter(Boolean).join(' '));
-
-      if (nombreForm && apellidoForm && (nombreDocCompleto || apellidoDocCompleto)) {
-        const coincideNombre   = nombreDocCompleto === nombreForm;
-        const coincideApellido = apellidoDocCompleto === apellidoForm;
-
-        if (!coincideNombre || !coincideApellido) {
-          const nombreEnDoc  = normalizar([nombreDoc, ext.apellido_paterno, ext.apellido_materno].filter(Boolean).join(' '));
-          const nombreEnForm = `${nombreForm} ${apellidoForm}`.trim();
-
-          let motivo = '';
-          if (!coincideNombre)   motivo += `• Nombre: doc tiene "<strong>${escapeHtml(nombreDocCompleto)}</strong>" — formulario tiene "<strong>${escapeHtml(nombreForm)}</strong>"<br>`;
-          if (!coincideApellido) motivo += `• Apellidos: doc tiene "<strong>${escapeHtml(apellidoDocCompleto)}</strong>" — formulario tiene "<strong>${escapeHtml(apellidoForm)}</strong>"<br>`;
-
-          procesoEl.innerHTML = `
-            ❌ <strong>El nombre no coincide con el documento</strong><br>
-            <span style="font-size:11px;line-height:2">
-              ${motivo}
-              <span style="color:var(--text-3)">Escribe exactamente como aparece en el documento.</span>
-            </span>`;
-          procesoEl.style.color = 'var(--danger)';
-          dropEl.style.borderColor = 'var(--danger)';
-          retryEl.style.display = 'block';
-          enrolCredFile = null; enrolCredProcesado = false;
-          verificarBotonGuardar(); return;
-        }
+      // ── Auto-llenar nombre completo desde el documento ──
+      let nombreCompleto = '';
+      if (docType === 'LICENCIA') {
+        nombreCompleto = (ext.nombre_conductor || '').trim();
+      } else {
+        nombreCompleto = [ext.nombre, ext.apellido_paterno, ext.apellido_materno].filter(Boolean).join(' ').trim();
       }
+      const ncEl = document.getElementById('enrol-nombre_completo');
+      if (ncEl && nombreCompleto) { ncEl.value = nombreCompleto; }
 
       // ── Todo OK — construir resumen ──
       let resumen = '';
@@ -3143,51 +3112,9 @@ function verificarBotonGuardar() {
   if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
   if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
 
-  // Validar nombre vs documento en tiempo real
-  let nombreCoincide = true;
-  if (enrolCredData) {
-    const ext = enrolCredData.extracted || {};
-    const docType = enrolCredData.docType || '';
-    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim();
-    let nombreDoc = '', apellidoDoc = '';
-    if (docType === 'LICENCIA') {
-      const nc = (ext.nombre_conductor || '').trim();
-      const partes = nc.split(' ').filter(Boolean);
-      nombreDoc = partes[0] || '';
-      apellidoDoc = partes.slice(1).join(' ');
-    } else {
-      nombreDoc = (ext.nombre || '').trim();
-      apellidoDoc = [ext.apellido_paterno||'', ext.apellido_materno||''].filter(Boolean).join(' ');
-    }
-    const nombreForm   = norm(document.getElementById('enrol-nombre')?.value?.trim() || '');
-    const apellidoForm = norm(document.getElementById('enrol-apellido')?.value?.trim() || '');
-    const nombreDocN   = norm(nombreDoc);
-    const apellidoDocN = norm(apellidoDoc);
-
-    const procesoEl = document.getElementById('enrol-cred-proceso');
-    if (nombreForm && apellidoForm) {
-      if (nombreDocN !== nombreForm || apellidoDocN !== apellidoForm) {
-        nombreCoincide = false;
-        if (procesoEl) {
-          procesoEl.style.display = 'block';
-          procesoEl.style.color = 'var(--danger)';
-          procesoEl.innerHTML = `❌ El nombre no coincide — Documento: "<strong>${escapeHtml(nombreDocN)} ${escapeHtml(apellidoDocN)}</strong>" vs Formulario: "<strong>${escapeHtml(nombreForm)} ${escapeHtml(apellidoForm)}</strong>"`;
-        }
-      } else {
-        nombreCoincide = true;
-        if (procesoEl && procesoEl.innerHTML.includes('no coincide')) {
-          // Restaurar el resumen del documento
-          const docTypeFinal = enrolCredData.docType || '';
-          procesoEl.style.color = 'var(--success)';
-          procesoEl.innerHTML = `✅ ${docTypeFinal} válido — ${escapeHtml(nombreDoc)} ${escapeHtml(apellidoDoc)}`;
-        }
-      }
-    }
-  }
-
   const btn = document.getElementById('btn-enrol-guardar');
   if (!btn) return;
-  const listo = tieneFoto && tieneCred && nombreCoincide;
+  const listo = tieneFoto && tieneCred;
   btn.disabled = !listo;
   btn.style.opacity = '1';
   btn.style.background = listo ? 'var(--success)' : 'var(--text-3)';
@@ -3205,8 +3132,10 @@ async function fileToBase64(file) {
 
 
 async function guardarEnrolamiento() {
-  const nombre   = document.getElementById('enrol-nombre').value.trim();
-  const apellido = document.getElementById('enrol-apellido').value.trim();
+  const nombreCompleto = document.getElementById('enrol-nombre_completo').value.trim();
+  const partes   = nombreCompleto.split(' ').filter(Boolean);
+  const nombre   = partes[0] || '';
+  const apellido = partes.slice(1).join(' ');
   const email = null;
   const registro_patronal = document.getElementById('enrol-registro-patronal')?.value?.trim() || null;
   const documento = document.getElementById('enrol-documento').value.trim();
@@ -3227,8 +3156,8 @@ async function guardarEnrolamiento() {
   console.log('====================================');
 
   // Validaciones básicas
-  if (!nombre || !apellido) { 
-    if (warnDatos) { warnDatos.style.display = 'flex'; warnDatos.textContent = '⚠ Nombre y apellido son obligatorios'; } 
+  if (!nombreCompleto) { 
+    if (warnDatos) { warnDatos.style.display = 'flex'; warnDatos.textContent = '⚠ El nombre es obligatorio (sube la credencial)'; } 
     return; 
   }
 
@@ -3242,77 +3171,6 @@ async function guardarEnrolamiento() {
     return; 
   }
 
-  // ── VALIDACIÓN NOMBRE VS DOCUMENTO ──────────────────
-  if (enrolCredData) {
-    const ext     = enrolCredData.extracted || {};
-    const docType = enrolCredData.docType   || '';
-
-    let nombreDoc   = '';
-    let apellidoDoc = '';
-
-    if (docType === 'LICENCIA') {
-      const nc     = (ext.nombre_conductor || '').trim();
-      const partes = nc.split(' ').filter(Boolean);
-      nombreDoc    = partes[0] || '';
-      apellidoDoc  = partes.slice(1).join(' ');
-    } else {
-      nombreDoc   = (ext.nombre || '').trim();
-      apellidoDoc = [ext.apellido_paterno || '', ext.apellido_materno || ''].filter(Boolean).join(' ');
-    }
-
-    // Función auxiliar para normalizar textos
-    const normalizar = (texto) => {
-      return (texto || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^\w\s]/g, '')
-        .trim();
-    };
-
-    const nombreForm   = normalizar(nombre);
-    const apellidoForm = normalizar(apellido);
-    const nombreDocN   = normalizar(nombreDoc);
-    const apellidoDocN = normalizar(apellidoDoc);
-
-    const coincideNombre   = nombreDocN === nombreForm;
-    const coincideApellido = apellidoDocN === apellidoForm;
-
-    if (!coincideNombre || !coincideApellido) {
-      let motivo = '';
-      if (!coincideNombre)   motivo += `\n• Nombre: doc="${nombreDocN}" | formulario="${nombreForm}"`;
-      if (!coincideApellido) motivo += `\n• Apellidos: doc="${apellidoDocN}" | formulario="${apellidoForm}"`;
-
-      // Mostrar en el proceso element para que sea visible
-      const procesoEl = document.getElementById('enrol-cred-proceso');
-      const dropEl    = document.getElementById('enrol-cred-drop');
-      const retryEl   = document.getElementById('enrol-cred-retry');
-
-      if (procesoEl) {
-        procesoEl.style.display = 'block';
-        procesoEl.innerHTML = `
-          ❌ <strong>El nombre no coincide con el documento</strong><br>
-          <span style="font-size:11px;line-height:2">
-            📄 Documento: <strong style="color:var(--danger)">${escapeHtml(nombreDocN)}</strong><br>
-            📝 Formulario: <strong style="color:var(--accent)">${escapeHtml(nombreForm + ' ' + apellidoForm)}</strong><br>
-            <span style="color:var(--text-3)">Corrige el nombre o sube el documento correcto.</span>
-          </span>`;
-        procesoEl.style.color = 'var(--danger)';
-      }
-      if (dropEl)  dropEl.style.borderColor = 'var(--danger)';
-      if (retryEl) retryEl.style.display = 'block';
-
-      // Scroll hacia el problema
-      procesoEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      if (warnDatos) { 
-        warnDatos.style.display = 'flex'; 
-        warnDatos.textContent = '⚠ El nombre no coincide con el documento — revisa el Paso 3'; 
-      }
-      return;
-    }
-  }
-  // ── FIN VALIDACIÓN ───────────────────────────────────
 
   if (warnDatos) warnDatos.style.display = 'none';
   
@@ -3404,8 +3262,7 @@ function cargarEmpleadoPendiente(id) {
   const opt = sel.querySelector(`option[value="${id}"]`);
   if (!opt) return;
   const e = JSON.parse(opt.dataset.emp);
-  document.getElementById('enrol-nombre').value    = e.nombre || '';
-  document.getElementById('enrol-apellido').value  = e.apellido || '';
+  document.getElementById('enrol-nombre_completo').value = [e.nombre, e.apellido].filter(Boolean).join(' ');
   document.getElementById('enrol-documento').value = e.documento_identidad || '';
   document.getElementById('enrol-empresa').value   = e.empresa || '';
   document.getElementById('enrol-cargo').value     = e.cargo && e.cargo !== 'Pendiente' ? e.cargo : '';
@@ -3418,7 +3275,7 @@ function cerrarFacialEnrolar() {
   Facial.detenerCamara();
   document.getElementById('modalEnrolar').classList.remove('open');
   document.body.style.overflow = '';
-  ['enrol-nombre','enrol-apellido','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-area','enrol-cargo','enrol-empresa'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['enrol-nombre_completo','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-area','enrol-cargo','enrol-empresa'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   facialDescriptorEnrol = null;
 }
 
