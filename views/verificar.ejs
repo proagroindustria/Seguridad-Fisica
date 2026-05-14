@@ -307,7 +307,7 @@
     async function iniciarVerificacion() {
       const statusEl = document.getElementById('verif-status');
       if (!facialModelos) facialModelos = await Facial.cargarModelos();
-      const ok = await Facial.iniciarCamara('verif-video', 'verif-canvas');
+      const ok = await Facial.iniciarCamara('verif-video', 'verif-canvas', 'environment');
       if (!ok) {
         statusEl.style.color = 'var(--danger)';
         statusEl.style.borderColor = 'var(--danger)';

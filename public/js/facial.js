@@ -30,13 +30,13 @@ const Facial = {
   },
 
   // ── Iniciar cámara ────────────────────────────────
-  async iniciarCamara(videoId, canvasId) {
+  async iniciarCamara(videoId, canvasId, facingMode = 'user') {
     this.videoEl  = document.getElementById(videoId);
     this.canvasEl = document.getElementById(canvasId);
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode }
       });
       this.videoEl.srcObject = this.stream;
       return true;
