@@ -373,7 +373,7 @@
         const icono = esEntrada ? '🟢' : '🔴';
         const mov   = esEntrada ? 'ENTRADA REGISTRADA. CUÍDATE, TU FAMILIA TE ESPERA' : 'SALIDA REGISTRADA. HASTA PRONTO';
 
-        mostrarNotificacion(icono, mov, color);
+        mostrarNotificacion(icono, mov, color, r.empleado.nombre + ' ' + r.empleado.apellido);
 
         resultEl.className = 'resultado-card permitido';
         resultEl.style.borderColor = color;
@@ -400,7 +400,7 @@
       btn.disabled = false;
     }
 
-    function mostrarNotificacion(icono, texto, color) {
+    function mostrarNotificacion(icono, texto, color, nombre) {
       const prev = document.getElementById('notif-overlay');
       if (prev) prev.remove();
 
@@ -425,6 +425,7 @@
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;letter-spacing:2px;color:${color};margin-bottom:8px">
             ${texto}
           </div>
+          ${nombre ? `<div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;letter-spacing:1px;color:#111;margin-bottom:4px">${nombre}</div>` : ''}
           <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#888;margin-top:16px">Toca para cerrar</div>
         </div>
       `;
@@ -517,7 +518,7 @@
           const icono = esEntrada ? '🟢' : '🔴';
           const mov   = esEntrada ? 'ENTRADA REGISTRADA' : 'SALIDA REGISTRADA';
 
-          mostrarNotificacion(icono, mov, color);
+          mostrarNotificacion(icono, mov, color, r.empleado.nombre + ' ' + r.empleado.apellido);
 
           resultEl.className = 'resultado-card permitido';
           resultEl.style.borderColor = color;
