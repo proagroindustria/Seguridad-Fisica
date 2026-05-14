@@ -228,20 +228,7 @@
           ⚠ Debes capturar el rostro antes de continuar
         </div>
 
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 2 — DATOS DEL TRABAJADOR</div>
-        <div class="facial-form-grid">
-         
-          <div class="facial-field"><label>Nombre(s) *</label><input type="text" id="enrol-nombre" placeholder="Nombre(s)" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
-<div class="facial-field"><label>Apellidos *</label><input type="text" id="enrol-apellido" placeholder="Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
-          <div class="facial-field"><label>Numero de empleado</label><input type="text" id="enrol-documento" placeholder="Numero de empleado"></div>
-          <div class="facial-field"><label>NSS</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarDuplicadoDebounced()"> </div>
-          <input type="hidden" id="enrol-empresa" value="">
-          <div class="facial-field"><label>Área</label><input type="text" id="enrol-area" placeholder="Área"></div>
-          <div class="facial-field"><label>Cargo</label><input type="text" id="enrol-cargo" placeholder="Cargo"></div>
-        <!--    <div class="facial-field"><label>Registro Patronal</label><input type="text" id="enrol-registro-patronal" placeholder="Registro Patronal"></div>-->
-        </div>
-
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 3 — DOCUMENTOS OBLIGATORIOS</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 2 — DOCUMENTOS OBLIGATORIOS</div>
 
         <div style="margin-bottom:4px">
           <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">
@@ -265,6 +252,18 @@
         </div>
         <div id="warn-cred" style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #f59e0b;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#92400e">
           ⚠ El documento es obligatorio
+        </div>
+
+        <!-- PASO 3: DATOS -->
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 3 — DATOS DEL TRABAJADOR</div>
+        <div class="facial-form-grid">
+          <div class="facial-field"><label>Nombre(s) *</label><input type="text" id="enrol-nombre" placeholder="Nombre(s)" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+          <div class="facial-field"><label>Apellidos *</label><input type="text" id="enrol-apellido" placeholder="Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+          <div class="facial-field"><label>No. Empleado</label><input type="text" id="enrol-documento" placeholder="Número de empleado"></div>
+          <div class="facial-field"><label>NSS</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarDuplicadoDebounced()"></div>
+          <input type="hidden" id="enrol-empresa" value="">
+          <div class="facial-field"><label>Área</label><input type="text" id="enrol-area" placeholder="Área"></div>
+          <div class="facial-field"><label>Cargo</label><input type="text" id="enrol-cargo" placeholder="Cargo"></div>
         </div>
 
         <div id="enrol-save-status" style="display:none;margin-bottom:12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);text-align:center"></div>
@@ -632,7 +631,7 @@ clearTimeout(_duplicadoTimeout);
       enrolCredProcesado = false; enrolImssProcesado = false;
       enrolCredData = null; enrolImssData = null;
 
-      ['enrol-nombre','enrol-apellido','enrol-registro-patronal','enrol-documento','enrol-nss','enrol-area','enrol-cargo'].forEach(id => {
+      ['enrol-nombre','enrol-apellido','enrol-documento','enrol-nss','enrol-area','enrol-cargo'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
       });
       const credProc = document.getElementById('enrol-cred-proceso'); if(credProc) credProc.style.display='none';
@@ -761,57 +760,13 @@ function verificarDuplicadoDebounced() {
   if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
   if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
 
-  const procesoEl = document.getElementById('enrol-cred-proceso');
-  let nombreCoincide = true;
-
-  if (enrolCredData) {
-    const ext = enrolCredData.extracted || {};
-    const docType = enrolCredData.docType || '';
-    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim();
-
-    let nombreDoc = '', apellidoDoc = '';
-    if (docType === 'LICENCIA') {
-      const nc = (ext.nombre_conductor || '').trim();
-      nombreDoc   = nc;
-      apellidoDoc = '';
-    } else {
-      nombreDoc   = (ext.nombre || '').trim();
-      apellidoDoc = [ext.apellido_paterno||'', ext.apellido_materno||''].filter(Boolean).join(' ');
-    }
-
-    const nombreForm   = norm(document.getElementById('enrol-nombre')?.value?.trim() || '');
-    const apellidoForm = norm(document.getElementById('enrol-apellido')?.value?.trim() || '');
-
-    // Comparar nombre completo concatenado
-    const docCompleto  = norm([nombreDoc, apellidoDoc].filter(Boolean).join(' '));
-    const formCompleto = norm([nombreForm, apellidoForm].filter(Boolean).join(' '));
-
-    if (!nombreForm || !apellidoForm) {
-      nombreCoincide = false;
-    } else if (docCompleto !== formCompleto) {
-      nombreCoincide = false;
-      if (procesoEl) {
-        procesoEl.style.display = 'block';
-        procesoEl.style.color = 'var(--danger)';
-        procesoEl.style.borderColor = 'var(--danger)';
-        procesoEl.innerHTML = `❌ El nombre no coincide — Documento: "<strong>${docCompleto}</strong>" vs Formulario: "<strong>${formCompleto}</strong>"`;
-      }
-    } else {
-      nombreCoincide = true;
-      if (procesoEl && procesoEl.innerHTML.includes('no coincide')) {
-        procesoEl.style.color = 'var(--success)';
-        procesoEl.style.borderColor = 'var(--success)';
-        procesoEl.innerHTML = `✅ ${docType} válido — ${nombreDoc}${apellidoDoc ? ' ' + apellidoDoc : ''}`;
-      }
-    }
-  }
-
+  const tieneNombre = !!(document.getElementById('enrol-nombre')?.value?.trim()) && !!(document.getElementById('enrol-apellido')?.value?.trim());
   const btn = document.getElementById('btn-enrol-guardar');
   if (!btn) return;
-  const listo = tieneFoto && tieneCred && nombreCoincide && !enrolDuplicado;
-  
+  const listo = tieneFoto && tieneCred && tieneNombre && !enrolDuplicado;
+
   btn.disabled = !listo;
-  btn.textContent = 'REGISTRAR PERSONAL'; // ← agrega esta línea
+  btn.textContent = 'REGISTRAR PERSONAL';
   btn.style.opacity = '1';
   btn.style.background = listo ? 'var(--success)' : 'var(--text-3)';
   btn.style.color = listo ? '#fff' : '#999';
@@ -1057,6 +1012,12 @@ function verificarDuplicadoDebounced() {
         apellidoDoc = [ext.apellido_paterno || '', ext.apellido_materno || ''].filter(Boolean).join(' ');
       }
 
+      // ── Auto-llenar nombre y apellido ──
+      const nEl = document.getElementById('enrol-nombre');
+      const aEl = document.getElementById('enrol-apellido');
+      if (nEl && nombreDoc)   nEl.value = nombreDoc;
+      if (aEl && apellidoDoc) aEl.value = apellidoDoc;
+
       // ── Todo OK — guardar y mostrar resumen ──
       const docTypeFinal = (ext.tipo_documento || '').toUpperCase() ||
         (ext.clave_elector ? 'INE' :
@@ -1120,10 +1081,10 @@ function verificarDuplicadoDebounced() {
 
 
 async function guardarEnrolamiento() {
-  const nombre    = document.getElementById('enrol-nombre').value.trim();
-  const apellido  = document.getElementById('enrol-apellido').value.trim();
+  const nombre   = document.getElementById('enrol-nombre').value.trim();
+  const apellido = document.getElementById('enrol-apellido').value.trim();
   const nss       = document.getElementById('enrol-nss')?.value?.trim() || null;
-  const registro_patronal = document.getElementById('enrol-registro-patronal')?.value?.trim() || null;
+  const registro_patronal = null;
   const documento = document.getElementById('enrol-documento').value.trim();
   const area      = document.getElementById('enrol-area').value.trim();
   const cargo     = document.getElementById('enrol-cargo').value.trim();
