@@ -516,7 +516,7 @@
           const esEntrada = r.tipo_movimiento === 'entrada';
           const color = esEntrada ? '#16a34a' : '#dc2626';
           const icono = esEntrada ? '🟢' : '🔴';
-          const mov   = esEntrada ? 'ENTRADA REGISTRADA' : 'SALIDA REGISTRADA';
+          const mov   = esEntrada ? 'ENTRADA REGISTRADA. CUÍDATE, TU FAMILIA TE ESPERA' : 'SALIDA REGISTRADA. HASTA PRONTO';
 
           mostrarNotificacion(icono, mov, color, r.empleado.nombre + ' ' + r.empleado.apellido);
 
