@@ -116,6 +116,23 @@
           <tbody id="histTbody"></tbody>
         </table>
         <div id="histEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">Sin registros de acceso.</div>
+
+        <div id="paginacionHist" style="display:none;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-top:1px solid var(--border)">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-3)" id="paginaInfo"></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="porPagina" onchange="cambiarPorPagina()" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:12px">
+              <option value="25">25 por página</option>
+              <option value="50" selected>50 por página</option>
+              <option value="100">100 por página</option>
+              <option value="200">200 por página</option>
+            </select>
+            <button id="btnPrimera" onclick="irPagina(1)" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:12px;cursor:pointer">«</button>
+            <button id="btnAnterior" onclick="irPagina(paginaActual-1)" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:12px;cursor:pointer">‹ ANT</button>
+            <div id="numPaginas" style="display:flex;gap:4px"></div>
+            <button id="btnSiguiente" onclick="irPagina(paginaActual+1)" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:12px;cursor:pointer">SIG ›</button>
+            <button id="btnUltima" onclick="irPagina(totalPaginas)" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:12px;cursor:pointer">»</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -125,6 +142,9 @@
     function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('open'); }
 
     let allAccesos = [];
+    let filtradosActual = [];
+    let paginaActual = 1;
+    let totalPaginas = 1;
 
     async function cargarHistorial() {
       try {
@@ -144,13 +164,69 @@
       const busq = document.getElementById('searchHistorial').value.toLowerCase();
       const mov  = document.getElementById('filtroMovimiento').value;
 
-      const filtrados = allAccesos.filter(a => {
+      filtradosActual = allAccesos.filter(a => {
         const nombre = (a.nombre_completo||'').toLowerCase();
         return (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
       });
 
-      renderHistorial(filtrados);
-      document.getElementById('totalHistorial').textContent = filtrados.length + ' registro(s)';
+      document.getElementById('totalHistorial').textContent = filtradosActual.length + ' registro(s)';
+      irPagina(1);
+    }
+
+    function cambiarPorPagina() {
+      irPagina(1);
+    }
+
+    function irPagina(n) {
+      const porPagina = parseInt(document.getElementById('porPagina').value);
+      totalPaginas = Math.max(1, Math.ceil(filtradosActual.length / porPagina));
+      paginaActual = Math.min(Math.max(1, n), totalPaginas);
+
+      const inicio = (paginaActual - 1) * porPagina;
+      const fin    = inicio + porPagina;
+      renderHistorial(filtradosActual.slice(inicio, fin));
+      actualizarPaginacion(porPagina);
+    }
+
+    function actualizarPaginacion(porPagina) {
+      const pag = document.getElementById('paginacionHist');
+      const empty = document.getElementById('histEmpty');
+
+      if (!filtradosActual.length) {
+        pag.style.display = 'none';
+        return;
+      }
+
+      pag.style.display = 'flex';
+
+      const inicio = (paginaActual - 1) * porPagina + 1;
+      const fin    = Math.min(paginaActual * porPagina, filtradosActual.length);
+      document.getElementById('paginaInfo').textContent =
+        'Mostrando ' + inicio + '–' + fin + ' de ' + filtradosActual.length + ' registros';
+
+      document.getElementById('btnPrimera').disabled  = paginaActual === 1;
+      document.getElementById('btnAnterior').disabled = paginaActual === 1;
+      document.getElementById('btnSiguiente').disabled = paginaActual === totalPaginas;
+      document.getElementById('btnUltima').disabled    = paginaActual === totalPaginas;
+
+      // Números de página (ventana de 5)
+      const numDiv = document.getElementById('numPaginas');
+      let html = '';
+      const ventana = 2;
+      for (let i = 1; i <= totalPaginas; i++) {
+        if (i === 1 || i === totalPaginas || (i >= paginaActual - ventana && i <= paginaActual + ventana)) {
+          const activo = i === paginaActual
+            ? 'background:var(--accent);color:#fff;border-color:var(--accent)'
+            : 'background:var(--bg-2);color:var(--text);border-color:var(--border)';
+          html += '<button onclick="irPagina(' + i + ')" style="padding:6px 10px;border:1px solid;font-family:Barlow Condensed,sans-serif;font-size:12px;cursor:pointer;' + activo + '">' + i + '</button>';
+        } else if (
+          (i === paginaActual - ventana - 1 && i > 1) ||
+          (i === paginaActual + ventana + 1 && i < totalPaginas)
+        ) {
+          html += '<span style="padding:6px 4px;color:var(--text-3);font-size:12px">…</span>';
+        }
+      }
+      numDiv.innerHTML = html;
     }
 
     function renderHistorial(data) {
