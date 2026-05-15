@@ -344,7 +344,7 @@
           <div class="form-row">
             <div class="form-group" style="position:relative">
               <!-- Modo normal: autocomplete de empleados -->
-              <div id="resp1-autocomplete-grupo">
+              <div id="resp1-autocomplete-grupo" style="position:relative">
                 <label class="form-label">RESPONSABLE CONTRATISTA 1 <span class="required">*</span></label>
                 <input type="text" id="responsable1_input" class="form-input" placeholder="Escribe para buscar trabajador activo..."
                   autocomplete="off"
@@ -352,6 +352,10 @@
                   onkeydown="responsable1Keydown(event)"
                   onblur="setTimeout(()=>cerrarResponsable1(),200)">
                 <p id="responsable1_hint" style="font-size:11px;color:var(--text-3);margin-top:4px"></p>
+                <div id="responsable1_sugerencias" style="
+                  display:none;position:absolute;top:100%;left:0;right:0;z-index:999;
+                  background:var(--bg-2);border:1px solid var(--accent);max-height:200px;overflow-y:auto">
+                </div>
               </div>
               <!-- Modo pase de visita: texto libre -->
               <div id="pv-resp1-grupo" style="display:none">
@@ -366,10 +370,6 @@
                 <input type="tel" id="responsable1_tel" class="form-input" placeholder="Ej. 9611234567" maxlength="15"
                   oninput="this.value=this.value.replace(/[^0-9]/g,'');verificarBotonSubmit()">
                 <p id="responsable1_tel_hint" style="font-size:11px;color:var(--danger);margin-top:4px;display:none">⚠ Teléfono obligatorio (mínimo 2 dígitos)</p>
-              </div>
-              <div id="responsable1_sugerencias" style="
-                display:none;position:absolute;top:100%;left:0;right:0;z-index:999;
-                background:var(--bg-2);border:1px solid var(--accent);max-height:200px;overflow-y:auto">
               </div>
             </div>
             <div class="form-group" style="position:relative">
