@@ -269,7 +269,25 @@
 
 
         <div id="warn-datos" style="display:none;align-items:center;gap:8px;background:#fee2e2;border:1px solid #ef4444;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#991b1b"></div>
-        
+
+        <!-- AVISO DE PRIVACIDAD — aceptación obligatoria (LFPDPPP) -->
+        <div style="border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:14px;background:var(--bg-2,#f8f9fa)">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:12px;color:var(--text-2);line-height:1.5">
+            <input type="checkbox" id="chk-aviso-privacidad" onchange="verificarBotonGuardar()"
+              style="margin-top:2px;accent-color:var(--accent);width:15px;height:15px;flex-shrink:0">
+            <span>
+              He leído y acepto el
+              <a href="https://www.proagroindustria.com/aviso-de-privacidad/" target="_blank" rel="noopener"
+                style="color:var(--accent);font-weight:600;text-decoration:underline">Aviso de Privacidad</a>
+              de <strong>PROAGRO Industria</strong>. Consiento el tratamiento de mis datos personales,
+              incluyendo datos biométricos (fotografía facial), para el control de acceso a las
+              instalaciones, en términos de la <strong>Ley Federal de Protección de Datos Personales
+              en Posesión de los Particulares (LFPDPPP)</strong>. Mis datos serán eliminados automáticamente
+              al concluir la vigencia del permiso autorizado.
+            </span>
+          </label>
+        </div>
+
         <div style="display:flex;gap:10px;justify-content:center">
           <div id="enrol-pendiente-id" style="display:none"></div>
           <button class="btn-aprobar" id="btn-enrol-guardar" onclick="guardarEnrolamiento()" disabled
@@ -669,6 +687,7 @@ clearTimeout(_duplicadoTimeout);
       enrolCredData = null; enrolImssData = null;
       const cc = document.getElementById('enrol-cred-clear'); if (cc) cc.style.display = 'none';
       facialDescriptorEnrol = null;
+      const chk = document.getElementById('chk-aviso-privacidad'); if (chk) chk.checked = false;
       Facial.detenerCamara();
       document.getElementById('modalEnrolar').classList.remove('open');
       document.body.style.overflow = '';
@@ -759,10 +778,11 @@ function verificarDuplicadoDebounced() {
   if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
   if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
 
-  const tieneNombre = !!(document.getElementById('enrol-nombre_completo')?.value?.trim());
+  const tieneNombre  = !!(document.getElementById('enrol-nombre_completo')?.value?.trim());
+  const aceptoAviso  = !!(document.getElementById('chk-aviso-privacidad')?.checked);
   const btn = document.getElementById('btn-enrol-guardar');
   if (!btn) return;
-  const listo = tieneFoto && tieneCred && tieneNombre && !enrolDuplicado;
+  const listo = tieneFoto && tieneCred && tieneNombre && aceptoAviso && !enrolDuplicado;
 
   btn.disabled = !listo;
   btn.textContent = 'REGISTRAR PERSONAL';
