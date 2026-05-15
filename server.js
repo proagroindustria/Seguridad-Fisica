@@ -199,6 +199,42 @@ const poolFacialCron = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+// =============================================================================
+// AVISO LEGAL — PROTECCIÓN DE DATOS PERSONALES
+// =============================================================================
+// Las funciones vencerPermisosExpirados() y limpiarTrabajadoresSinPermiso()
+// implementan la política de supresión automática de datos personales conforme
+// a lo establecido en la Ley Federal de Protección de Datos Personales en
+// Posesión de los Particulares (LFPDPPP, México) y su Reglamento.
+//
+// DATOS QUE SE ELIMINAN al vencer la vigencia del permiso:
+//   · Nombre completo del trabajador / visitante
+//   · Descriptor biométrico facial (vector numérico)
+//   · Imágenes de documentos de identidad (imagen en base64)
+//   · Datos OCR extraídos del documento (JSON)
+//   · Número de Seguro Social (NSS / IMSS)
+//   · Información de empresa, área y cargo
+//   · Código QR de acceso personal
+//
+// DATOS QUE SE CONSERVAN  (historial de accesos):
+//   · Folio del permiso (sin identificador personal directo)
+//   · Instantánea de nombre y área (campos *_snapshot) para trazabilidad
+//     operativa, disociados del registro de identidad principal.
+//
+// MECANISMO DE BORRADO:
+//   1. Diariamente a la 01:00 h (hora local del servidor) se ejecutan ambas
+//      funciones de forma automática mediante programarVencimiento().
+//   2. También se ejecutan al iniciar el servidor para cubrir el periodo en
+//      que el servidor pudo haber estado inactivo.
+//   3. El periodo de gracia para trabajadores sin permiso activo es de
+//      DIAS_GRACIA_LIMPIEZA días (predeterminado: 7), configurable por
+//      variable de entorno.
+//
+// BASE LEGAL: el titular del permiso otorgó consentimiento al momento de
+// registrarse, siendo informado de que sus datos se tratarán exclusivamente
+// durante la vigencia del permiso autorizado.
+// =============================================================================
+
 async function vencerPermisosExpirados() {
   try {
     const r = await poolCron.query(`
@@ -294,9 +330,17 @@ async function vencerPermisosExpirados() {
   }
 }
 
+// -----------------------------------------------------------------------------
+// AVISO LEGAL — Supresión complementaria de datos personales huérfanos
+// Esta función elimina registros de trabajadores que, transcurrido el periodo
+// de gracia (DIAS_GRACIA_LIMPIEZA días), no cuentan con ningún permiso activo
+// o pendiente. Su propósito es garantizar el principio de LIMITACIÓN DEL PLAZO
+// DE CONSERVACIÓN conforme al Art. 11 de la LFPDPPP: los datos no se
+// conservarán más tiempo del necesario para la finalidad que justificó su
+// tratamiento (control de acceso durante la vigencia del permiso).
+// -----------------------------------------------------------------------------
 async function limpiarTrabajadoresSinPermiso() {
 
-  //el 7 es la variable de los dias en los que se van a eliminar
   const DIAS_GRACIA = parseInt(process.env.DIAS_GRACIA_LIMPIEZA || '7', 10);
   try {
     // Nombres que tienen al menos un permiso que no esté rechazado ni vencido
@@ -430,10 +474,12 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
   console.log(`📋 Modo: ${process.env.OFFLINE_MODE === 'true' ? 'SIN BASE DE DATOS (offline)' : 'PostgreSQL'}\n`);
 
-  // 1. Ejecutar al arrancar — cubre permisos vencidos mientras el servidor estuvo caído
+  // AVISO LEGAL: ejecución inmediata de supresión de datos personales al
+  // iniciar el servidor, para cubrir el periodo en que pudo estar inactivo.
+  // Cumple con el principio de supresión oportuna (LFPDPPP Art. 11).
   vencerPermisosExpirados();
   limpiarTrabajadoresSinPermiso();
 
-  // 2. Programar ejecución diaria a la 1:00 AM
+  // Programa la supresión automática diaria a las 01:00 h (hora del servidor).
   programarVencimiento();
 });
