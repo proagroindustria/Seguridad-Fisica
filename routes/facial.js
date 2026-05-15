@@ -405,8 +405,7 @@ router.get('/accesos', requireAuth, requireSeguridad, async (req, res) => {
               COALESCE(e.empresa, a.empresa_snapshot) as empresa
        FROM accesos a
        LEFT JOIN trabajadores e ON a.empleado_id = e.id
-       ORDER BY COALESCE(a.fecha_hora, a.timestamp) DESC
-       LIMIT 200`
+       ORDER BY COALESCE(a.fecha_hora, a.timestamp) DESC`
     );
     res.json({ success: true, data: result.rows });
   } catch(e) {
