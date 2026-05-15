@@ -95,29 +95,31 @@
         </div>
       </div>
 
-      <div class="table-container">
-        <div id="histLoading" class="table-loading">
-          <div class="loading-spinner"></div>
-          <span>Cargando historial...</span>
+      <div class="table-container" style="display:flex;flex-direction:column;max-height:calc(100vh - 210px)">
+        <div id="tableBody" style="overflow-y:auto;flex:1">
+          <div id="histLoading" class="table-loading">
+            <div class="loading-spinner"></div>
+            <span>Cargando historial...</span>
+          </div>
+          <table class="data-table" id="histTable" style="display:none">
+            <thead>
+              <tr>
+                <th>FECHA / HORA</th>
+                <th>MOVIMIENTO</th>
+                <th>RESULTADO</th>
+                <th>EMPLEADO</th>
+                <th>ÁREA</th>
+                <th>EMPRESA</th>
+                <th>SIMILITUD</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody id="histTbody"></tbody>
+          </table>
+          <div id="histEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">Sin registros de acceso.</div>
         </div>
-        <table class="data-table" id="histTable" style="display:none">
-          <thead>
-            <tr>
-              <th>FECHA / HORA</th>
-              <th>MOVIMIENTO</th>
-              <th>RESULTADO</th>
-              <th>EMPLEADO</th>
-              <th>ÁREA</th>
-              <th>EMPRESA</th>
-              <th>SIMILITUD</th>
-              <th>IP</th>
-            </tr>
-          </thead>
-          <tbody id="histTbody"></tbody>
-        </table>
-        <div id="histEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">Sin registros de acceso.</div>
 
-        <div id="paginacionHist" style="display:none;padding:16px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-top:1px solid var(--border)">
+        <div id="paginacionHist" style="display:none;flex-shrink:0;padding:16px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-top:1px solid var(--border)">
           <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-3)" id="paginaInfo"></div>
           <div style="display:flex;align-items:center;gap:6px">
             <select id="porPagina" onchange="cambiarPorPagina()" style="padding:6px 10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:12px">
