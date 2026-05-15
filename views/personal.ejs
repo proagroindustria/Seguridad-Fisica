@@ -257,8 +257,7 @@
         <!-- PASO 3: DATOS -->
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;border-top:1px solid var(--border);padding-top:14px">PASO 3 — DATOS DEL TRABAJADOR</div>
         <div class="facial-form-grid">
-          <div class="facial-field"><label>Nombre(s) *</label><input type="text" id="enrol-nombre" placeholder="Nombre(s)" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
-          <div class="facial-field"><label>Apellidos *</label><input type="text" id="enrol-apellido" placeholder="Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
+          <div class="facial-field" style="grid-column:1/-1"><label>Nombre completo * <span style="color:var(--text-3);font-weight:400;font-size:10px">— se llena automáticamente desde el documento</span></label><input type="text" id="enrol-nombre_completo" placeholder="Nombre(s) y Apellidos" oninput="verificarBotonGuardar(); verificarDuplicadoDebounced()"></div>
           <div class="facial-field"><label>No. Empleado</label><input type="text" id="enrol-documento" placeholder="Número de empleado"></div>
           <div class="facial-field"><label>NSS</label><input type="text" id="enrol-nss" placeholder="NSS" oninput="verificarDuplicadoDebounced()"></div>
           <input type="hidden" id="enrol-empresa" value="">
@@ -631,7 +630,7 @@ clearTimeout(_duplicadoTimeout);
       enrolCredProcesado = false; enrolImssProcesado = false;
       enrolCredData = null; enrolImssData = null;
 
-      ['enrol-nombre','enrol-apellido','enrol-documento','enrol-nss','enrol-area','enrol-cargo'].forEach(id => {
+      ['enrol-nombre_completo','enrol-documento','enrol-nss','enrol-area','enrol-cargo'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
       });
       const credProc = document.getElementById('enrol-cred-proceso'); if(credProc) credProc.style.display='none';
@@ -760,7 +759,7 @@ function verificarDuplicadoDebounced() {
   if (fotoWarn) fotoWarn.style.display = tieneFoto ? 'none' : 'flex';
   if (credWarn) credWarn.style.display = (enrolCredFile || tieneCred) ? 'none' : 'flex';
 
-  const tieneNombre = !!(document.getElementById('enrol-nombre')?.value?.trim()) && !!(document.getElementById('enrol-apellido')?.value?.trim());
+  const tieneNombre = !!(document.getElementById('enrol-nombre_completo')?.value?.trim());
   const btn = document.getElementById('btn-enrol-guardar');
   if (!btn) return;
   const listo = tieneFoto && tieneCred && tieneNombre && !enrolDuplicado;
@@ -1012,11 +1011,10 @@ function verificarDuplicadoDebounced() {
         apellidoDoc = [ext.apellido_paterno || '', ext.apellido_materno || ''].filter(Boolean).join(' ');
       }
 
-      // ── Auto-llenar nombre y apellido ──
-      const nEl = document.getElementById('enrol-nombre');
-      const aEl = document.getElementById('enrol-apellido');
-      if (nEl && nombreDoc)   nEl.value = nombreDoc;
-      if (aEl && apellidoDoc) aEl.value = apellidoDoc;
+      // ── Auto-llenar nombre completo ──
+      const ncEl = document.getElementById('enrol-nombre_completo');
+      const nombreCompleto = [nombreDoc, apellidoDoc].filter(Boolean).join(' ').trim();
+      if (ncEl && nombreCompleto) { ncEl.value = nombreCompleto; verificarBotonGuardar(); }
 
       // ── Todo OK — guardar y mostrar resumen ──
       const docTypeFinal = (ext.tipo_documento || '').toUpperCase() ||
@@ -1081,8 +1079,10 @@ function verificarDuplicadoDebounced() {
 
 
 async function guardarEnrolamiento() {
-  const nombre   = document.getElementById('enrol-nombre').value.trim();
-  const apellido = document.getElementById('enrol-apellido').value.trim();
+  const nombreCompleto = document.getElementById('enrol-nombre_completo').value.trim();
+  const partes   = nombreCompleto.split(' ').filter(Boolean);
+  const nombre   = partes[0] || '';
+  const apellido = partes.slice(1).join(' ');
   const nss       = document.getElementById('enrol-nss')?.value?.trim() || null;
   const registro_patronal = null;
   const documento = document.getElementById('enrol-documento').value.trim();
