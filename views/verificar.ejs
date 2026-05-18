@@ -471,20 +471,23 @@
       }
       const ctx = qrCanvas.getContext('2d', { willReadFrequently: true });
 
-      qrScanInterval = setInterval(async () => {
+      // Resolución reducida para jsQR — suficiente para leer QRs y mucho más rápido
+      const QR_W = 320, QR_H = 240;
+      qrCanvas.width  = QR_W;
+      qrCanvas.height = QR_H;
+
+      qrScanInterval = setInterval(() => {
         if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-        qrCanvas.width  = video.videoWidth;
-        qrCanvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
-        const imageData = ctx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code) {
+        ctx.drawImage(video, 0, 0, QR_W, QR_H);
+        const imageData = ctx.getImageData(0, 0, QR_W, QR_H);
+        const code = jsQR(imageData.data, QR_W, QR_H);
+        if (code && code.data) {
           clearInterval(qrScanInterval);
           qrScanInterval = null;
           if (qrStatus) qrStatus.textContent = '⏳ QR detectado — verificando...';
-          await procesarQRDetectado(code.data);
+          procesarQRDetectado(code.data);
         }
-      }, 200);
+      }, 300);
     }
 
     function desactivarModoQR() {
