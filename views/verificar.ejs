@@ -499,10 +499,58 @@
       iniciarVerificacion();
     }
 
+    // ─── Decodificador de QR leído con teclado español ───────────────────────
+    // El lector físico (HID) usa layout US, Windows usa layout ES.
+    // Resultado: { → [,  " → [,  } → *,  : → Ñ,  _ → ?
+    function decodeQRFisico(str) {
+      if (!str) return str;
+      try { JSON.parse(str); return str; } catch(e) {} // ya es JSON válido
+
+      if (!str.startsWith('[')) return str; // formato desconocido, pasar tal cual
+
+      try {
+        let s = str.slice(1); // quitar [ inicial  (era {)
+        if (s.endsWith('*')) s = s.slice(0, -1); // quitar * final (era })
+
+        const obj = {};
+        for (let parte of s.split(',')) {
+          if (parte.startsWith('[')) parte = parte.slice(1); // quitar " inicial de la clave
+
+          const sep = parte.indexOf('[Ñ'); // separador clave:valor (era :")
+          if (sep === -1) continue;
+
+          const clave = parte.slice(0, sep).replace(/\?/g, '_'); // ? era _
+          let val     = parte.slice(sep + 2); // después del [Ñ
+
+          if (val.startsWith('[')) {
+            // Valor string
+            val = val.slice(1);
+            if (val.endsWith('[')) val = val.slice(0, -1);
+            obj[clave] = val;
+          } else {
+            // null / true / false / número
+            const v = val.replace(/\[$/, '');
+            obj[clave] = v === 'null'  ? null
+                       : v === 'true'  ? true
+                       : v === 'false' ? false
+                       : v !== '' && !isNaN(v) ? Number(v)
+                       : v;
+          }
+        }
+
+        if (!Object.keys(obj).length) return str;
+        console.log('[QR físico decodificado]', obj);
+        return JSON.stringify(obj);
+      } catch(e) {
+        return str; // si falla, devolver original
+      }
+    }
+
     async function procesarQRDetectado(data) {
+      const decoded = decodeQRFisico(data); // normalizar antes de enviar
       const qrStatus = document.getElementById('qr-scan-status');
       try {
-        const r = await Facial.verificarQR(data);
+        const r = await Facial.verificarQR(decoded);
         console.log('Resultado QR:', r);
 
         const resultEl = document.getElementById('verif-result');
