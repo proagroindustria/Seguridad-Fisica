@@ -771,14 +771,26 @@ router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => 
     }
 
     // ── Flujo normal (trabajadores regulares) ─────────────────────────────
-    const empResult = await poolFacial.query(
-      `SELECT id, nombre, apellido, area, cargo, empresa, estatus
-       FROM trabajadores
-       WHERE LOWER(REGEXP_REPLACE(CONCAT(nombre, ' ', apellido), '\\s+', ' ', 'g')) = LOWER($1)
-         AND LOWER(TRIM(empresa)) = LOWER($2)
-         AND activo = true LIMIT 1`,
-      [nombre, empresa]
-    );
+    // Buscar por ID directo si el QR lo trae (más confiable que por nombre)
+    let empResult;
+    if (qrObj.trabajador_id && Number.isInteger(Number(qrObj.trabajador_id))) {
+      empResult = await poolFacial.query(
+        `SELECT id, nombre, apellido, area, cargo, empresa, estatus
+         FROM trabajadores WHERE id = $1 AND activo = true LIMIT 1`,
+        [Number(qrObj.trabajador_id)]
+      );
+    }
+    // Fallback: buscar por nombre completo + empresa
+    if (!empResult || !empResult.rows.length) {
+      empResult = await poolFacial.query(
+        `SELECT id, nombre, apellido, area, cargo, empresa, estatus
+         FROM trabajadores
+         WHERE LOWER(CONCAT(nombre, ' ', apellido)) = LOWER($1)
+           AND LOWER(empresa) = LOWER($2)
+           AND activo = true LIMIT 1`,
+        [nombre, empresa]
+      );
+    }
     if (!empResult.rows.length) {
       console.warn('[verificar-qr] Trabajador no encontrado. nombre=%s empresa=%s', nombre, empresa);
       return res.status(401).json({ acceso: 'denegado', mensaje: 'Trabajador no encontrado o inactivo' });
