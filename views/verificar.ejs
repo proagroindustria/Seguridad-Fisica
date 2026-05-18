@@ -558,6 +558,55 @@
     }
 
     iniciarVerificacion();
+
+    // ═══════════════════════════════════════════════
+    // LECTOR QR FÍSICO (HID / USB — emula teclado)
+    // Los lectores físicos "teclean" los datos del QR
+    // muy rápido y terminan con Enter.
+    // ═══════════════════════════════════════════════
+    (function () {
+      let buf = '';
+      let resetTimer = null;
+
+      function limpiarBuffer() {
+        buf = '';
+        if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+      }
+
+      document.addEventListener('keydown', function (e) {
+        // Si el foco está en un control de formulario, no interferir
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+        // Reiniciar el temporizador de inactividad (300 ms)
+        if (resetTimer) clearTimeout(resetTimer);
+        resetTimer = setTimeout(limpiarBuffer, 300);
+
+        if (e.key === 'Enter') {
+          const data = buf.trim();
+          limpiarBuffer();
+          // Mínimo razonable para descartar pulsaciones sueltas de Enter
+          if (data.length >= 8) {
+            console.log('[Lector QR físico] datos recibidos:', data);
+            const statusEl = document.getElementById('verif-status');
+            if (statusEl) {
+              statusEl.textContent = '⏳ QR físico detectado — verificando...';
+              statusEl.style.color = 'var(--accent)';
+              statusEl.style.borderColor = 'var(--accent)';
+              statusEl.style.background = 'var(--bg-3)';
+              statusEl.style.display = 'block';
+            }
+            procesarQRDetectado(data);
+          }
+          return;
+        }
+
+        // Acumular caracteres imprimibles
+        if (e.key.length === 1) {
+          buf += e.key;
+        }
+      });
+    })();
   </script>
 </body>
 </html>
