@@ -723,9 +723,16 @@ router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => 
 
     let qrObj;
     try { qrObj = typeof qr_data === 'string' ? JSON.parse(qr_data) : qr_data; }
-    catch(e) { return res.status(400).json({ error: 'QR inválido' }); }
+    catch(e) {
+      console.error('[verificar-qr] JSON inválido, qr_data recibido:', JSON.stringify(qr_data));
+      return res.status(400).json({ error: 'QR inválido' });
+    }
 
-    const { nombre, empresa } = qrObj;
+    console.log('[verificar-qr] qrObj parseado:', JSON.stringify(qrObj));
+
+    // Normalizar nombre y empresa (quitar espacios extra, trim)
+    const nombre  = typeof qrObj.nombre  === 'string' ? qrObj.nombre.trim().replace(/\s+/g, ' ')  : '';
+    const empresa = typeof qrObj.empresa === 'string' ? qrObj.empresa.trim().replace(/\s+/g, ' ') : '';
     if (!nombre || !empresa) return res.status(400).json({ error: 'QR incompleto' });
 
     // ── Flujo para invitados ──────────────────────────────────────────────
@@ -767,10 +774,15 @@ router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => 
     const empResult = await poolFacial.query(
       `SELECT id, nombre, apellido, area, cargo, empresa, estatus
        FROM trabajadores
-       WHERE LOWER(CONCAT(nombre, ' ', apellido)) = LOWER($1) AND LOWER(empresa)=LOWER($2) AND activo=true LIMIT 1`,
+       WHERE LOWER(REGEXP_REPLACE(CONCAT(nombre, ' ', apellido), '\\s+', ' ', 'g')) = LOWER($1)
+         AND LOWER(TRIM(empresa)) = LOWER($2)
+         AND activo = true LIMIT 1`,
       [nombre, empresa]
     );
-    if (!empResult.rows.length) return res.status(401).json({ acceso: 'denegado', mensaje: 'Trabajador no encontrado o inactivo' });
+    if (!empResult.rows.length) {
+      console.warn('[verificar-qr] Trabajador no encontrado. nombre=%s empresa=%s', nombre, empresa);
+      return res.status(401).json({ acceso: 'denegado', mensaje: 'Trabajador no encontrado o inactivo' });
+    }
 
     const trabajador = empResult.rows[0];
     const validacion = await validarAccesoTrabajador(trabajador.id);
