@@ -108,7 +108,8 @@ async function validarAccesoTrabajador(trabajadorId) {
   if (t.estatus !== 'activo' || !t.activo) return { permitido: false, razon: 'INACTIVO', detalle: `${nombreCompleto} no tiene estatus activo en el sistema.` };
   if (!t.fecha_induccion) return { permitido: false, razon: 'SIN_INDUCCION', detalle: `${nombreCompleto} no tiene fecha de inducción registrada. Es necesario completar la inducción antes de ingresar.` };
 
-  const hoy = new Date();
+  // PRUEBA: cambiar a  new Date()  cuando termines de verificar el fix
+  const hoy = new Date('2026-05-21T19:00:00-06:00');
   const fechaInduccion = new Date(t.fecha_induccion);
   const limiteVigencia = new Date(fechaInduccion);
   limiteVigencia.setFullYear(limiteVigencia.getFullYear() + 1);
