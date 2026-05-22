@@ -109,7 +109,7 @@ async function validarAccesoTrabajador(trabajadorId) {
   if (!t.fecha_induccion) return { permitido: false, razon: 'SIN_INDUCCION', detalle: `${nombreCompleto} no tiene fecha de inducción registrada. Es necesario completar la inducción antes de ingresar.` };
 
   // PRUEBA: cambiar a  new Date()  cuando termines de verificar el fix
-  const hoy = new Date('2026-05-21T19:00:00-06:00');
+  const hoy = new Date();
   const fechaInduccion = new Date(t.fecha_induccion);
   const limiteVigencia = new Date(fechaInduccion);
   limiteVigencia.setFullYear(limiteVigencia.getFullYear() + 1);
