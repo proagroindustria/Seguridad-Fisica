@@ -669,7 +669,8 @@ clearTimeout(_duplicadoTimeout);
       document.getElementById('btn-enrol-guardar').disabled  = true;
 
       if (!facialModelos) { facialModelos = await Facial.cargarModelos(); }
-      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas');
+      const esCelular = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas', esCelular ? 'environment' : 'user');
       if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
       Facial.iniciarDeteccion(
         () => { statusEl.className = 'facial-status ok'; statusEl.textContent = '✅ Rostro detectado'; document.getElementById('btn-enrol-capturar').disabled = false; },
