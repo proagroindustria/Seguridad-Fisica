@@ -216,9 +216,13 @@
       <div class="facial-body">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">PASO 1 — CAPTURA DE ROSTRO</div>
         <div id="enrol-status" class="facial-status">⏳ Iniciando cámara...</div>
-        <div class="facial-cam-wrap">
+        <div class="facial-cam-wrap" style="position:relative">
           <video id="enrol-video" autoplay muted playsinline></video>
           <canvas id="enrol-canvas"></canvas>
+          <button id="btn-flip-cam" onclick="flipCamaraEnrol()" title="Cambiar cámara"
+            style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.5);border:none;border-radius:50%;width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;z-index:10">
+            &#x1F501;
+          </button>
         </div>
         <div id="enrol-cap-status" class="facial-status error">❌ Rostro no capturado</div>
         <div style="display:flex;justify-content:center;margin-bottom:8px">
@@ -670,12 +674,30 @@ clearTimeout(_duplicadoTimeout);
 
       if (!facialModelos) { facialModelos = await Facial.cargarModelos(); }
       const esCelular = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas', esCelular ? 'environment' : 'user');
+      document.getElementById('btn-flip-cam').style.display = esCelular ? 'flex' : 'none';
+      window._enrolFacingMode = esCelular ? 'environment' : 'user';
+      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas', window._enrolFacingMode);
       if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
+      iniciarDeteccionEnrol();
+    }
+
+    function iniciarDeteccionEnrol() {
+      const statusEl = document.getElementById('enrol-status');
       Facial.iniciarDeteccion(
         () => { statusEl.className = 'facial-status ok'; statusEl.textContent = '✅ Rostro detectado'; document.getElementById('btn-enrol-capturar').disabled = false; },
         () => { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ Sin rostro detectado'; document.getElementById('btn-enrol-capturar').disabled = true; }
       );
+    }
+
+    async function flipCamaraEnrol() {
+      window._enrolFacingMode = (window._enrolFacingMode === 'user') ? 'environment' : 'user';
+      Facial.detenerCamara();
+      document.getElementById('btn-enrol-capturar').disabled = true;
+      const statusEl = document.getElementById('enrol-status');
+      statusEl.className = 'facial-status'; statusEl.textContent = '⏳ Cambiando cámara...';
+      const ok = await Facial.iniciarCamara('enrol-video', 'enrol-canvas', window._enrolFacingMode);
+      if (!ok) { statusEl.className = 'facial-status error'; statusEl.textContent = '❌ No se pudo acceder a la cámara'; return; }
+      iniciarDeteccionEnrol();
     }
 
     function cerrarFacialEnrolar() {
