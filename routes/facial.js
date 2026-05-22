@@ -118,7 +118,15 @@ async function validarAccesoTrabajador(trabajadorId) {
     return { permitido: false, razon: 'INDUCCION_VENCIDA', detalle: `La inducción de ${nombreCompleto} venció el ${vencioStr}. Fue realizada el ${fechaStr} y solo tiene vigencia de 1 año. Se requiere renovación.` };
   }
 
-  const hoyStr = hoy.toISOString().split('T')[0];
+  const hoyStr = new Intl.DateTimeFormat('sv', { timeZone: 'America/Mexico_City' }).format(hoy);
+  const horaUTC    = hoy.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+  const horaMx     = hoy.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: false });
+  const fechaUTC   = hoy.toISOString().split('T')[0];
+  console.log(`[FECHA-CHECK] Trabajador: ${nombreCompleto}`);
+  console.log(`[FECHA-CHECK]   Hora UTC    : ${horaUTC}`);
+  console.log(`[FECHA-CHECK]   Hora México : ${horaMx}`);
+  console.log(`[FECHA-CHECK]   Fecha UTC   : ${fechaUTC}  ${fechaUTC !== hoyStr ? '⚠ DIFIERE (bug sin fix)' : '✓ igual'}`);
+  console.log(`[FECHA-CHECK]   Fecha usada : ${hoyStr}  ← esta se compara contra el permiso`);
   const { rows: permisos } = await poolSolicitudes.query(
     `SELECT p.id, p.folio FROM permisos p
      INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
@@ -178,7 +186,7 @@ router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
     }
 
     const nombreCompleto = `${mejorMatch.nombre} ${mejorMatch.apellido}`;
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = new Intl.DateTimeFormat('sv', { timeZone: 'America/Mexico_City' }).format(new Date());
     const solicitudResult = await poolSolicitudes.query(
       `SELECT p.id, p.folio, p.empresa, p.fecha_inicio, p.fecha_fin FROM permisos p
        INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
@@ -807,7 +815,7 @@ router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => 
       return res.json({ acceso: 'denegado', acceso_denegado: true, razon: validacion.razon, detalle: validacion.detalle, nombre: `${trabajador.nombre} ${trabajador.apellido}` });
     }
 
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = new Intl.DateTimeFormat('sv', { timeZone: 'America/Mexico_City' }).format(new Date());
     const solicitudResult = await poolSolicitudes.query(
       `SELECT p.id, p.folio, p.empresa, p.fecha_inicio, p.fecha_fin FROM permisos p
        INNER JOIN permiso_personal pp ON pp.permiso_id=p.id
