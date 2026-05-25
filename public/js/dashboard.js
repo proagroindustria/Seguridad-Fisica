@@ -3517,75 +3517,89 @@ function responsableKeydown(event) {
 }
 
 // =====================================================
-// NOTIFICACIONES — Sin checkin 4+ días
+// NOTIFICACIONES
+// seguridad_fisica → personas 3+ días sin checar (nombre, empresa, cargo)
+// contratista      → solicitudes próximas a vencer
 // =====================================================
 let notifPanelAbierto = false;
 
 async function cargarNotificaciones() {
   try {
-    const badge = document.getElementById('notifBadge');
-    const lista  = document.getElementById('notifLista');
+    const badge   = document.getElementById('notifBadge');
+    const lista   = document.getElementById('notifLista');
     const totalEl = document.getElementById('notifTotal');
     if (!badge) return;
 
-    const [rCheckin, rVencer] = await Promise.all([
-      fetch('/facial/notificaciones-sin-checkin').then(r => r.json()).catch(() => ({ success: false, data: [], total: 0 })),
-      fetch('/solicitudes/proximas-a-vencer').then(r => r.json()).catch(() => ({ success: false, data: [] }))
-    ]);
+    if (USER_ROL === 'seguridad_fisica') {
+      const rCheckin = await fetch('/facial/notificaciones-sin-checkin')
+        .then(r => r.json())
+        .catch(() => ({ success: false, data: [], total: 0 }));
 
-    const checkinItems = rCheckin.success ? (rCheckin.data || []) : [];
-    const vencerItems  = rVencer.success  ? (rVencer.data  || []) : [];
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
+      const items = rCheckin.success ? (rCheckin.data || []) : [];
 
-    const vencerFiltrados = vencerItems.filter(p => {
-      const soloFecha = String(p.fecha_fin || '').slice(0, 10);
-      const fechaFin = new Date(soloFecha + 'T12:00:00');
-      if (isNaN(fechaFin.getTime())) return false;
-      const dias = Math.round((fechaFin - hoy) / (1000*60*60*24));
-      return dias >= 0 && dias <= 3;
-    });
+      if (items.length === 0) {
+        badge.style.display = 'none';
+        if (lista)   lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">✅ Sin alertas.</div>';
+        if (totalEl) totalEl.textContent = '0 alertas';
+        return;
+      }
 
-    const htmlVencer = vencerFiltrados.map(p => {
-      const soloFecha = String(p.fecha_fin || '').slice(0, 10);
-      const fechaFin = new Date(soloFecha + 'T12:00:00');
-      const diasRestantes = Math.round((fechaFin - hoy) / (1000*60*60*24));
-      const diasTxt = diasRestantes === 0 ? 'vence HOY' : diasRestantes === 1 ? 'vence en 1 día' : `vence en ${diasRestantes} días`;
-      const color = diasRestantes === 0 ? '#ef4444' : '#f59e0b';
-      return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:4px;border-left:3px solid ${color}">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600;color:var(--text);font-size:13px">📋 ${p.folio}</span>
-          <span style="font-size:10px;padding:2px 8px;background:rgba(245,158,11,0.1);border:1px solid ${color};color:${color};font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${diasTxt.toUpperCase()}</span>
-        </div>
-        <div style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Solicitud próxima a vencer · ${p.empresa}</div>
-      </div>`;
-    }).join('');
+      const html = items.map(t => `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px;border-left:3px solid #ef4444">
+          <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escapeHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
+          <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Empresa: ${escapeHtml(t.empresa || '—')}</span>
+          <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Puesto: ${escapeHtml(t.cargo || '—')}</span>
+        </div>`).join('');
 
-    
-    const htmlCheckin = checkinItems.map(t => {
-      const ultimo = t.ultimo_acceso ? new Date(t.ultimo_acceso).toLocaleString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Nunca ha checado';
-      const diffDias = t.ultimo_acceso ? Math.floor((new Date() - new Date(t.ultimo_acceso)) / (1000*60*60*24)) : null;
-      return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:4px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600;color:var(--text);font-size:13px">${t.nombre} ${t.apellido}</span>
-          <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${diffDias !== null ? diffDias + ' DÍAS' : 'SIN REGISTRO'}</span>
-        </div>
-        <div style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Último acceso: ${ultimo}</div>
-      </div>`;
-    }).join('');
+      badge.style.display = 'flex';
+      badge.textContent = items.length > 9 ? '9+' : items.length;
+      if (totalEl) totalEl.textContent = items.length + ' alerta' + (items.length !== 1 ? 's' : '');
+      if (lista)   lista.innerHTML = html;
 
-    const totalCount = vencerFiltrados.length + checkinItems.length;
+    } else {
+      // contratista: solicitudes próximas a vencer
+      const rVencer = await fetch('/solicitudes/proximas-a-vencer')
+        .then(r => r.json())
+        .catch(() => ({ success: false, data: [] }));
 
-    if (totalCount === 0) {
-      badge.style.display = 'none';
-      if (lista)   lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">✅ Sin alertas.</div>';
-      if (totalEl) totalEl.textContent = '0 alertas';
-      return;
+      const vencerItems = rVencer.success ? (rVencer.data || []) : [];
+      const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+      const filtrados = vencerItems.filter(p => {
+        const soloFecha = String(p.fecha_fin || '').slice(0, 10);
+        const fechaFin = new Date(soloFecha + 'T12:00:00');
+        if (isNaN(fechaFin.getTime())) return false;
+        const dias = Math.round((fechaFin - hoy) / (1000 * 60 * 60 * 24));
+        return dias >= 0 && dias <= 3;
+      });
+
+      if (filtrados.length === 0) {
+        badge.style.display = 'none';
+        if (lista)   lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">✅ Sin alertas.</div>';
+        if (totalEl) totalEl.textContent = '0 alertas';
+        return;
+      }
+
+      const html = filtrados.map(p => {
+        const soloFecha = String(p.fecha_fin || '').slice(0, 10);
+        const fechaFin = new Date(soloFecha + 'T12:00:00');
+        const diasRestantes = Math.round((fechaFin - hoy) / (1000 * 60 * 60 * 24));
+        const diasTxt = diasRestantes === 0 ? 'vence HOY' : diasRestantes === 1 ? 'vence en 1 día' : `vence en ${diasRestantes} días`;
+        const color = diasRestantes === 0 ? '#ef4444' : '#f59e0b';
+        return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:4px;border-left:3px solid ${color}">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:600;color:var(--text);font-size:13px">📋 ${p.folio}</span>
+            <span style="font-size:10px;padding:2px 8px;background:rgba(245,158,11,0.1);border:1px solid ${color};color:${color};font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${diasTxt.toUpperCase()}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Solicitud próxima a vencer · ${p.empresa}</div>
+        </div>`;
+      }).join('');
+
+      badge.style.display = 'flex';
+      badge.textContent = filtrados.length > 9 ? '9+' : filtrados.length;
+      if (totalEl) totalEl.textContent = filtrados.length + ' alerta' + (filtrados.length !== 1 ? 's' : '');
+      if (lista)   lista.innerHTML = html;
     }
-
-    badge.style.display = 'flex';
-    badge.textContent = totalCount > 9 ? '9+' : totalCount;
-    if (totalEl) totalEl.textContent = totalCount + ' alerta' + (totalCount !== 1 ? 's' : '');
-    if (lista)   lista.innerHTML = htmlVencer + htmlCheckin;
   } catch(e) { console.warn('Error cargando notificaciones:', e.message); }
 }
 
