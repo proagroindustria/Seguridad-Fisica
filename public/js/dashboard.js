@@ -3544,12 +3544,21 @@ async function cargarNotificaciones() {
         return;
       }
 
-      const html = items.map(t => `
+      const html = items.map(t => {
+        const ultimoTxt = t.ultimo_acceso
+          ? new Date(t.ultimo_acceso).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'Nunca ha checado';
+        return `
         <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px;border-left:3px solid #ef4444">
-          <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escapeHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escapeHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
+            <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${t.dias_sin_checar} DÍAS</span>
+          </div>
           <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Empresa: ${escapeHtml(t.empresa || '—')}</span>
           <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Puesto: ${escapeHtml(t.cargo || '—')}</span>
-        </div>`).join('');
+          <span style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Último checado: ${ultimoTxt}</span>
+        </div>`;
+      }).join('');
 
       badge.style.display = 'flex';
       badge.textContent = items.length > 9 ? '9+' : items.length;
