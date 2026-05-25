@@ -600,31 +600,80 @@ router.put('/empleados/:id/fecha-induccion', requireAuth, requireSeguridad, asyn
 
 // ─── GET /facial/notificaciones-sin-checkin ───────
 router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
-  const rol     = req.session.user?.rol;
-  const empresa = req.session.user?.nombre_completo;
+  const rol          = req.session.user?.rol;
+  const empresaUser  = req.session.user?.nombre_completo;
   const esVigilancia = rol === 'seguridad_fisica';
-  if (!esVigilancia && !empresa) return res.status(403).json({ error: 'Sin acceso' });
-  try {
-    const trabajadores = esVigilancia
-      ? await poolFacial.query(`
-          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa, t.cargo,
-            COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
-          FROM trabajadores t
-          WHERE t.activo = true
-        `)
-      : await poolFacial.query(`
-          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa, t.cargo,
-            COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
-          FROM trabajadores t
-          WHERE LOWER(t.empresa) = LOWER($1) AND t.activo = true
-        `, [empresa]);
+  if (!esVigilancia && !empresaUser) return res.status(403).json({ error: 'Sin acceso' });
 
-    const hoy = new Date();
-    const sinCheckin = trabajadores.rows.filter(t => {
-      if (!t.ultimo_acceso) return true;
-      const diffDias = Math.floor((hoy - new Date(t.ultimo_acceso)) / (1000*60*60*24));
-      return diffDias >= 3;
-    });
+  try {
+    const hoy = new Intl.DateTimeFormat('sv', { timeZone: 'America/Mexico_City' }).format(new Date());
+
+    // 1. Obtener trabajadores de permisos ACTIVOS vigentes hoy
+    const permisosQ = esVigilancia
+      ? await poolSolicitudes.query(`
+          SELECT pp.nombre AS trabajador_nombre, p.fecha_inicio
+          FROM permisos p
+          INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
+          WHERE p.estado = 'activo' AND p.fecha_inicio <= $1 AND p.fecha_fin >= $1
+        `, [hoy])
+      : await poolSolicitudes.query(`
+          SELECT pp.nombre AS trabajador_nombre, p.fecha_inicio
+          FROM permisos p
+          INNER JOIN permiso_personal pp ON pp.permiso_id = p.id
+          WHERE p.estado = 'activo' AND p.fecha_inicio <= $1 AND p.fecha_fin >= $1
+            AND LOWER(p.empresa) = LOWER($2)
+        `, [hoy, empresaUser]);
+
+    if (!permisosQ.rows.length) return res.json({ success: true, data: [], total: 0 });
+
+    // Mapa nombre_en_minúsculas -> fecha_inicio más antigua del permiso activo
+    const workerMap = {};
+    for (const row of permisosQ.rows) {
+      const key = (row.trabajador_nombre || '').toLowerCase().trim();
+      if (!workerMap[key] || new Date(row.fecha_inicio) < new Date(workerMap[key])) {
+        workerMap[key] = row.fecha_inicio;
+      }
+    }
+
+    // 2. Obtener trabajadores activos con su último acceso exitoso
+    const trabajadoresQ = await poolFacial.query(`
+      SELECT t.id, t.nombre, t.apellido, t.empresa, t.cargo,
+        MAX(a.fecha_hora) FILTER (WHERE a.resultado = 'exitoso') AS ultimo_acceso
+      FROM trabajadores t
+      LEFT JOIN accesos a ON a.empleado_id = t.id
+      WHERE t.activo = true
+      GROUP BY t.id, t.nombre, t.apellido, t.empresa, t.cargo
+    `);
+
+    const hoyDate = new Date();
+    const sinCheckin = [];
+
+    for (const t of trabajadoresQ.rows) {
+      const key = `${t.nombre} ${t.apellido}`.toLowerCase().trim();
+      const fechaInicioStr = workerMap[key];
+      if (!fechaInicioStr) continue; // No tiene permiso activo hoy
+
+      const fechaInicio = new Date(fechaInicioStr + 'T00:00:00');
+      const ultimoAcceso = t.ultimo_acceso ? new Date(t.ultimo_acceso) : null;
+
+      // Punto de referencia: el último check-in dentro del permiso, o el inicio del permiso
+      const referencia = (ultimoAcceso && ultimoAcceso >= fechaInicio) ? ultimoAcceso : fechaInicio;
+      const diasSinChecar = Math.floor((hoyDate - referencia) / (1000 * 60 * 60 * 24));
+
+      if (diasSinChecar < 3) continue; // Menos de 3 días desde el último movimiento
+
+      sinCheckin.push({
+        id: t.id,
+        nombre: t.nombre,
+        apellido: t.apellido,
+        empresa: t.empresa,
+        cargo: t.cargo,
+        ultimo_acceso: t.ultimo_acceso || null,
+        dias_sin_checar: diasSinChecar,
+        fecha_inicio_permiso: fechaInicioStr
+      });
+    }
+
     res.json({ success: true, data: sinCheckin, total: sinCheckin.length });
   } catch(e) {
     console.error('Error notificaciones:', e);
