@@ -626,12 +626,15 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
 
     if (!permisosQ.rows.length) return res.json({ success: true, data: [], total: 0 });
 
-    // Mapa nombre_en_minúsculas -> fecha_inicio más antigua del permiso activo
+    // Mapa nombre_en_minúsculas -> fecha_inicio más antigua del permiso activo (string YYYY-MM-DD)
     const workerMap = {};
     for (const row of permisosQ.rows) {
       const key = (row.trabajador_nombre || '').toLowerCase().trim();
-      if (!workerMap[key] || new Date(row.fecha_inicio) < new Date(workerMap[key])) {
-        workerMap[key] = row.fecha_inicio;
+      const fi = row.fecha_inicio instanceof Date
+        ? row.fecha_inicio.toISOString().slice(0, 10)
+        : String(row.fecha_inicio).slice(0, 10);
+      if (!workerMap[key] || fi < workerMap[key]) {
+        workerMap[key] = fi;
       }
     }
 
