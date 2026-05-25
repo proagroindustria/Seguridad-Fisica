@@ -122,7 +122,7 @@
         </div>
       </div>
       <div class="topbar-right">
-        <% if (user.rol === 'contratista') { %>
+        <% if (user.rol === 'contratista' || user.rol === 'seguridad_fisica') { %>
         <div style="position:relative" id="notifWrapper">
           <button onclick="toggleNotificaciones()" style="
             background:none;border:none;cursor:pointer;color:var(--text);

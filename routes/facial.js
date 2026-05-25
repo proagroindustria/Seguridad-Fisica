@@ -600,15 +600,24 @@ router.put('/empleados/:id/fecha-induccion', requireAuth, requireSeguridad, asyn
 
 // ─── GET /facial/notificaciones-sin-checkin ───────
 router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
+  const rol     = req.session.user?.rol;
   const empresa = req.session.user?.nombre_completo;
-  if (!empresa) return res.status(403).json({ error: 'Sin acceso' });
+  const esVigilancia = rol === 'seguridad_fisica';
+  if (!esVigilancia && !empresa) return res.status(403).json({ error: 'Sin acceso' });
   try {
-    const trabajadores = await poolFacial.query(`
-      SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
-        COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
-      FROM trabajadores t
-      WHERE LOWER(t.empresa) = LOWER($1) AND t.activo = true
-    `, [empresa]);
+    const trabajadores = esVigilancia
+      ? await poolFacial.query(`
+          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
+            COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
+          FROM trabajadores t
+          WHERE t.activo = true
+        `)
+      : await poolFacial.query(`
+          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
+            COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
+          FROM trabajadores t
+          WHERE LOWER(t.empresa) = LOWER($1) AND t.activo = true
+        `, [empresa]);
 
     const hoy = new Date();
     const sinCheckin = trabajadores.rows.filter(t => {
