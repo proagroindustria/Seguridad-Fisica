@@ -607,13 +607,13 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
   try {
     const trabajadores = esVigilancia
       ? await poolFacial.query(`
-          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
+          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa, t.cargo,
             COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
           FROM trabajadores t
           WHERE t.activo = true
         `)
       : await poolFacial.query(`
-          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa,
+          SELECT DISTINCT t.id, t.nombre, t.apellido, t.empresa, t.cargo,
             COALESCE((SELECT MAX(a.fecha_hora) FROM accesos a WHERE a.empleado_id=t.id AND a.resultado='exitoso'), NULL) as ultimo_acceso
           FROM trabajadores t
           WHERE LOWER(t.empresa) = LOWER($1) AND t.activo = true
@@ -623,7 +623,7 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
     const sinCheckin = trabajadores.rows.filter(t => {
       if (!t.ultimo_acceso) return true;
       const diffDias = Math.floor((hoy - new Date(t.ultimo_acceso)) / (1000*60*60*24));
-      return diffDias >= 4;
+      return diffDias >= 3;
     });
     res.json({ success: true, data: sinCheckin, total: sinCheckin.length });
   } catch(e) {
