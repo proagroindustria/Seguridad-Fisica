@@ -1,6 +1,6 @@
 // =====================================================
 // NOTIFICACIONES — Seguridad Física
-// Personas 3+ días sin checar con permiso activo
+// Personas 4+ días sin checar con permiso activo
 // Requiere: window.USER_ROL definido antes de cargar este script
 // =====================================================
 

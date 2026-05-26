@@ -575,6 +575,23 @@
       if (!id || isNaN(id)) { alert('Error: no se identificó al trabajador'); return; }
       const emp = allPersonal.find(e => e.id === id);
       const nombre = emp ? (emp.nombre||'') + ' ' + (emp.apellido||'') : 'este trabajador';
+
+      if (estatus === 'activo') {
+        const inputFecha = document.getElementById('inputFechaInduccion');
+        const fechaGuardada = emp?.fecha_induccion;
+        const fechaInput = inputFecha?.value;
+        if (!fechaGuardada && !fechaInput) {
+          const inputEl = document.getElementById('inputFechaInduccion');
+          if (inputEl) {
+            inputEl.style.borderColor = 'var(--danger)';
+            inputEl.focus();
+            setTimeout(() => { inputEl.style.borderColor = ''; }, 3000);
+          }
+          alert('⚠ Debes registrar la fecha de inducción antes de activar al trabajador.');
+          return;
+        }
+      }
+
       const label = estatus === 'activo' ? 'ACTIVAR' : estatus === 'no_activo' ? 'DESACTIVAR' : 'VETAR';
       if (!confirm('¿Confirmas ' + label + ' a ' + nombre + '?')) return;
       try {
