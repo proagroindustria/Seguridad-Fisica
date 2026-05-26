@@ -401,6 +401,9 @@ router.post('/enrolar', requireAuth, requireEnrolador, async (req, res) => {
 
 
 
+// ─── GET /facial/ping ─────────────────────────────
+router.get('/ping', requireAuth, (req, res) => res.json({ ok: true }));
+
 // ─── GET /facial/accesos ───────────────────────────
 router.get('/accesos', requireAuth, requireSeguridad, async (req, res) => {
   try {
