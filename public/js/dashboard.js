@@ -3518,7 +3518,7 @@ function responsableKeydown(event) {
 
 // =====================================================
 // NOTIFICACIONES
-// seguridad_fisica → personas 3+ días sin checar (nombre, empresa, cargo)
+// seguridad_fisica → personas 4+ días sin checar (nombre, empresa, cargo)
 // contratista      → solicitudes próximas a vencer
 // =====================================================
 let notifPanelAbierto = false;

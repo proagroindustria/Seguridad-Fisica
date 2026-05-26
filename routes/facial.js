@@ -666,7 +666,7 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
       const referencia = (ultimoAcceso && ultimoAcceso >= fechaInicio) ? ultimoAcceso : fechaInicio;
       const diasSinChecar = Math.floor((hoyDate - referencia) / (1000 * 60 * 60 * 24));
 
-      if (diasSinChecar < 3) continue; // Menos de 3 días desde el último movimiento
+      if (diasSinChecar < 4) continue; // Menos de 4 días desde el último movimiento
 
       sinCheckin.push({
         id: t.id,
