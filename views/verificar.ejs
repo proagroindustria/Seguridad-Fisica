@@ -621,20 +621,33 @@
     iniciarVerificacion();
 
     // ═══════════════════════════════════════════════
-    // HEARTBEAT — detecta sesión expirada cada 30s
-    // y al volver de pantalla apagada (móvil)
+    // HEARTBEAT — detecta sesión expirada y servidor caído
+    // Intervalo: 30s normal, 5s cuando el servidor no responde
     // ═══════════════════════════════════════════════
+    let serverWasDown = false;
+    let sessionCheckTimer = null;
+
     async function checkSesion() {
       try {
         const r = await fetch('/facial/ping');
-        if (r.status === 401) window.location.href = '/login-asistencia';
-      } catch(e) {}
+        if (r.status === 401 || serverWasDown) {
+          window.location.href = '/login-asistencia';
+          return;
+        }
+        serverWasDown = false;
+      } catch(e) {
+        serverWasDown = true;
+      }
+      sessionCheckTimer = setTimeout(checkSesion, serverWasDown ? 5000 : 30000);
     }
 
-    setInterval(checkSesion, 30000);
+    sessionCheckTimer = setTimeout(checkSesion, 30000);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') checkSesion();
+      if (document.visibilityState === 'visible') {
+        if (sessionCheckTimer) clearTimeout(sessionCheckTimer);
+        checkSesion();
+      }
     });
 
     // ═══════════════════════════════════════════════
