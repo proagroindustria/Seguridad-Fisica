@@ -451,7 +451,7 @@ router.get('/mi-personal', requireAuth, async (req, res) => {
               e.imss_nss,
               (SELECT COUNT(*) FROM documentos d WHERE d.empleado_id = e.id) as total_docs
        FROM trabajadores e
-       WHERE LOWER(e.empresa) = LOWER($1) AND e.activo = true
+       WHERE LOWER(e.empresa) = LOWER($1)
        ORDER BY e.creado_en DESC`,
       [empresa]
     );
@@ -475,7 +475,6 @@ router.get('/todo-personal', requireAuth, requireSeguridad, async (req, res) => 
               e.imss_nss,
               (SELECT COUNT(*) FROM documentos d WHERE d.empleado_id = e.id) as total_docs
        FROM trabajadores e
-       WHERE e.activo = true
        ORDER BY e.creado_en DESC`
     );
     const padronMap = await obtenerPadronPorEmpresas(
