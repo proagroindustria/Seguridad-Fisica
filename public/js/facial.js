@@ -152,6 +152,7 @@ const Facial = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ descriptor, tipo_movimiento, ip_cliente })
   });
+  if (res.status === 401) return { sesionExpirada: true };
   return res.json();
 },
 
@@ -191,6 +192,7 @@ const Facial = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ qr_data, ip_cliente })
   });
+  if (res.status === 401) return { sesionExpirada: true };
   return res.json();
 }
 

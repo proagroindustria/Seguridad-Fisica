@@ -360,6 +360,11 @@
 
       console.log('Resultado verificar:', r);
 
+      if (r.sesionExpirada) {
+        window.location.href = '/login-asistencia';
+        return;
+      }
+
       const resultEl = document.getElementById('verif-result');
       const movEl    = document.getElementById('res-mov');
       const nombreEl = document.getElementById('res-nombre');
@@ -556,6 +561,11 @@
         const r = await Facial.verificarQR(decoded);
         console.log('Resultado QR:', r);
 
+        if (r.sesionExpirada) {
+          window.location.href = '/login-asistencia';
+          return;
+        }
+
         const resultEl = document.getElementById('verif-result');
         const movEl    = document.getElementById('res-mov');
         const nombreEl = document.getElementById('res-nombre');
@@ -609,6 +619,23 @@
     }
 
     iniciarVerificacion();
+
+    // ═══════════════════════════════════════════════
+    // HEARTBEAT — detecta sesión expirada cada 30s
+    // y al volver de pantalla apagada (móvil)
+    // ═══════════════════════════════════════════════
+    async function checkSesion() {
+      try {
+        const r = await fetch('/facial/ping');
+        if (r.status === 401) window.location.href = '/login-asistencia';
+      } catch(e) {}
+    }
+
+    setInterval(checkSesion, 30000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkSesion();
+    });
 
     // ═══════════════════════════════════════════════
     // LECTOR QR FÍSICO (HID / USB — emula teclado)
