@@ -354,8 +354,8 @@ router.post('/enrolar', requireAuth, requireEnrolador, async (req, res) => {
         cargo || 'Empleado',
         empresa || null, 
         JSON.stringify(descriptor), 
-        estatus || 'activo',  // Cambiado a 'activo' por defecto
-        true,  // Cambiado a true (activo al enrolarse)
+        estatus || 'no_activo',
+        (estatus || 'no_activo') === 'activo',
         imss_vigente !== undefined ? imss_vigente : null,
         imss_estatus || null, 
         imss_fecha_vigencia || null, 
@@ -646,7 +646,7 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
         MAX(a.fecha_hora) FILTER (WHERE a.resultado = 'exitoso') AS ultimo_acceso
       FROM trabajadores t
       LEFT JOIN accesos a ON a.empleado_id = t.id
-      WHERE t.activo = true
+      WHERE t.estatus = 'activo'
       GROUP BY t.id, t.nombre, t.apellido, t.empresa, t.cargo
     `);
 
