@@ -46,6 +46,7 @@
               <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
               <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${t.dias_sin_checar} DÍAS</span>
             </div>
+            <span>ESTA ES LA PRUEBA DE EDICION</span>
             <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Empresa: ${escHtml(t.empresa || '—')}</span>
             <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Puesto: ${escHtml(t.cargo || '—')}</span>
             <span style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Último checado: ${ultimoTxt}</span>
