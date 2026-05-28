@@ -44,9 +44,7 @@
           <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px;border-left:3px solid #ef4444">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
-              <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">SIN CHECAR ${t.dias_sin_checar} DÍAS</span>
             </div>
-            <span>AAAAAAA PRUEBAS</span>
             <span style="font-size:11px;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:0.5px">⚠ No ha registrado asistencia en ${t.dias_sin_checar} día${t.dias_sin_checar !== 1 ? 's' : ''}</span>
             <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Empresa: ${escHtml(t.empresa || '—')}</span>
             <span style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Último checado: ${ultimoTxt}</span>
