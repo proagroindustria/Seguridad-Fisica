@@ -3550,10 +3550,10 @@ async function cargarNotificaciones() {
           : 'Nunca ha checado';
         return `
         <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px;border-left:3px solid #ef4444">
+          <span style="font-size:11px;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:0.5px">⚠ No ha registrado asistencia en ${t.dias_sin_checar} día${t.dias_sin_checar !== 1 ? 's' : ''}</span>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-weight:700;color:var(--text);font-size:13px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.5px">${escapeHtml((t.nombre || '') + ' ' + (t.apellido || ''))}</span>
           </div>
-          <span style="font-size:11px;color:#ef4444;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:0.5px">⚠ No ha registrado asistencia en ${t.dias_sin_checar} día${t.dias_sin_checar !== 1 ? 's' : ''}</span>
           <span style="font-size:11px;color:var(--text-2);font-family:'Share Tech Mono',monospace">Empresa: ${escapeHtml(t.empresa || '—')}</span>
           <span style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Último checado: ${ultimoTxt}</span>
         </div>`;
