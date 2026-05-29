@@ -17,7 +17,7 @@ function docEstadoBadge(estado) {
 }
 
 function docTipoLabel(tipo) {
-  return tipo || '<span style="color:var(--text-3)">Procesando...</span>';
+  return tipo || '';
 }
 
 function docFecha(ts) {
@@ -783,7 +783,7 @@ async function verDocsEmpleado(empleadoId, nombreEmpleado) {
       <div style="padding:14px;border:1px solid var(--border);margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div style="display:flex;gap:8px;align-items:center">
-            <span style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text)">${doc.doc_type || 'Procesando...'}</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text)">${doc.doc_type || ''}</span>
             <span style="font-size:11px;padding:2px 8px;border:1px solid ${badgeColor};color:${badgeColor}">${doc.estado_validacion?.toUpperCase()}</span>
           </div>
           <span style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">${docFecha(doc.created_at)}</span>
