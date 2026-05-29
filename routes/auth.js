@@ -144,7 +144,7 @@ router.post('/login-asistencia', (req, res) => {
 
 router.get('/logout-asistencia', (req, res) => {
   req.session.asistencia_user = null;
-  res.redirect('/login-asistencia');
+  res.redirect('/login');
 });
 
 
