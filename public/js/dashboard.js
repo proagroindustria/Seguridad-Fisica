@@ -1688,26 +1688,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   cargarSolicitudes();
 
-  // Auto-refresh cada 45 segundos si no hay modal abierto
+  // Auto-refresh cada 45 segundos si no hay modal abierto (silencioso: sin ocultar la tabla)
   setInterval(() => {
     const modalAbierto = document.querySelector('.modal-overlay.open, .submodal-overlay.open');
-    if (!modalAbierto) cargarSolicitudes();
+    if (!modalAbierto) cargarSolicitudes(true);
   }, 45_000);
 });
 
 
 // ===================== TABLA SOLICITUDES =====================
-async function cargarSolicitudes() {
+async function cargarSolicitudes(silencioso = false) {
   const loading = document.getElementById('tableLoading');
   const table = document.getElementById('dataTable');
   const empty = document.getElementById('emptyState');
-  loading.style.display = 'flex'; table.style.display = 'none'; empty.style.display = 'none';
+  if (!silencioso) {
+    loading.style.display = 'flex'; table.style.display = 'none'; empty.style.display = 'none';
+  }
   try {
     const res = await fetch('/solicitudes');
     const result = await res.json();
     if (result.success) { todosSolicitudes = result.data; renderTabla(todosSolicitudes); actualizarStats(todosSolicitudes); }
   } catch(err) { console.error(err); }
-  finally { loading.style.display = 'none'; }
+  finally { if (!silencioso) loading.style.display = 'none'; }
 }
 
 const ESTADO_INFO = {
