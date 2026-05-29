@@ -9,29 +9,34 @@
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/login.css">
   <style>
+    :root {
+      --accent:      #22c55e;
+      --accent-dim:  rgba(34,197,94,0.12);
+      --accent-glow: rgba(34,197,94,0.3);
+    }
     .brand-panel {
-      background: var(--accent);
-      border-right-color: var(--black);
+      background: #0d2b1a;
+      border-right-color: #22c55e;
     }
     .brand-panel::before {
-      background: radial-gradient(circle, rgba(0,0,0,0.08) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%);
     }
     .brand-panel::after {
-      background: radial-gradient(circle, rgba(0,0,0,0.05) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%);
     }
     .grid-overlay {
       background-image:
-        linear-gradient(rgba(0,0,0,0.07) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,0,0,0.07) 1px, transparent 1px);
+        linear-gradient(rgba(34,197,94,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,197,94,0.06) 1px, transparent 1px);
     }
-    .logo-mark        { background: var(--black); }
-    .logo-mark span   { color: var(--accent); }
-    .brand-name       { color: var(--black); }
-    .brand-subtitle   { color: rgba(0,0,0,0.65); }
-    .brand-divider    { background: var(--black); }
-    .brand-desc       { color: rgba(0,0,0,0.55); }
-    .status-dot       { background: var(--black); box-shadow: 0 0 8px rgba(0,0,0,0.3); }
-    .status-text      { color: var(--black); }
+    .logo-mark        { background: #22c55e; }
+    .logo-mark span   { color: #0d2b1a; }
+    .brand-name       { color: #ffffff; }
+    .brand-subtitle   { color: #22c55e; }
+    .brand-divider    { background: #22c55e; }
+    .brand-desc       { color: rgba(255,255,255,0.55); }
+    .status-dot       { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+    .status-text      { color: #22c55e; }
   </style>
 </head>
 <body>
