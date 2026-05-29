@@ -567,19 +567,19 @@
   <!-- MODAL DETALLE SOLICITUD -->
   <div class="modal-overlay" id="modalDetalle">
     <div class="modal-box modal-box-xl" id="modalDetalleBox">
-      <div class="modal-header">
-        <div>
-          <p class="modal-eyebrow" id="detalleEyebrow">SOLICITUD</p>
-          <h2 class="modal-title" id="detalleFolio">Cargando...</h2>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <div id="detalleBtnAcciones"></div>
+      <div class="modal-header detalle-modal-header">
+        <div class="detalle-hdr-top">
+          <div>
+            <p class="modal-eyebrow" id="detalleEyebrow">SOLICITUD</p>
+            <h2 class="modal-title" id="detalleFolio">Cargando...</h2>
+          </div>
           <button class="modal-close" onclick="closeDetalleBtn()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
           </button>
         </div>
+        <div id="detalleBtnAcciones" class="detalle-hdr-acciones"></div>
       </div>
 
       <div class="detalle-body" id="detalleBody">

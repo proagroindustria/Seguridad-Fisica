@@ -438,6 +438,16 @@ html, body {
   background: var(--bg-3);
 }
 
+/* Detalle modal header layout */
+.detalle-modal-header { flex-direction: column; gap: 0; }
+.detalle-hdr-top {
+  display: flex; align-items: flex-start; justify-content: space-between; width: 100%;
+}
+.detalle-hdr-acciones {
+  display: flex; gap: 10px; align-items: center;
+  padding-top: 14px; flex-wrap: wrap;
+}
+
 .modal-eyebrow {
   font-family: 'Share Tech Mono', monospace;
   font-size: 10px; letter-spacing: 0.2em; color: var(--accent); margin-bottom: 4px;
@@ -1197,26 +1207,18 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
     background: var(--bg-2);
   }
 
-  /* Botones iguales, full-width, táctiles */
-  .btn-aprobar, .btn-danger {
-    width: 100%;
+  /* Botones de acción del detalle: full-width, táctiles, iguales */
+  .detalle-hdr-acciones {
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 4px;
+  }
+  .detalle-hdr-acciones .btn-aprobar,
+  .detalle-hdr-acciones .btn-danger {
+    flex: 1;
     justify-content: center;
-    padding: 15px 16px;
-    font-size: 15px;
-    letter-spacing: 0.1em;
-    border-width: 1.5px;
-  }
-  .btn-aprobar {
-    background: var(--success);
-    color: #fff;
-    border-color: var(--success);
-    order: 1;
-  }
-  .btn-danger {
-    background: var(--bg-2);
-    color: var(--danger);
-    border-color: rgba(220,38,38,0.5);
-    order: 2;
+    padding: 14px 12px;
+    font-size: 14px;
   }
 
   /* Detalle 1 columna en teléfono */
