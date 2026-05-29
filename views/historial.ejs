@@ -122,7 +122,6 @@
               <tr>
                 <th>FECHA / HORA</th>
                 <th>MOVIMIENTO</th>
-                <th>RESULTADO</th>
                 <th>EMPLEADO</th>
                 <th>ÁREA</th>
                 <th>EMPRESA</th>
@@ -263,7 +262,6 @@
         return '<tr style="border-bottom:1px solid var(--border)">' +
           '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + fecha + '</td>' +
           '<td style="font-weight:700;color:' + movColor + ';font-family:Barlow Condensed,sans-serif;font-size:13px">' + movLabel + '</td>' +
-          '<td class="' + resClass + '">' + (a.resultado === 'exitoso' ? '✅' : '❌') + ' ' + a.resultado + '</td>' +
           '<td style="font-weight:500;color:var(--text)">' + nombre + '</td>' +
           '<td style="color:var(--text-2)">' + (a.area||'—') + '</td>' +
           '<td style="color:var(--text-2)">' + (a.empresa||'—') + '</td>' +
