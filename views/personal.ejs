@@ -1284,7 +1284,11 @@ async function liberarTrabajador() {
 
     cargarPersonal();
 
-
+    // Auto-refresh cada 45 segundos si no hay modal abierto
+    setInterval(() => {
+      const modalAbierto = document.querySelector('.modal-overlay.open, .submodal-overlay.open');
+      if (!modalAbierto) cargarPersonal();
+    }, 45_000);
 
   </script>
   <script>const USER_ROL = '<%= user.rol %>';</script>

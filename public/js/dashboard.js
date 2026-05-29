@@ -1687,6 +1687,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   cargarSolicitudes();
+
+  // Auto-refresh cada 45 segundos si no hay modal abierto
+  setInterval(() => {
+    const modalAbierto = document.querySelector('.modal-overlay.open, .submodal-overlay.open');
+    if (!modalAbierto) cargarSolicitudes();
+  }, 45_000);
 });
 
 
