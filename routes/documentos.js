@@ -12,6 +12,14 @@ const poolDoc = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+const poolMain = new Pool({
+  host:     process.env.DB_HOST,
+  port:     process.env.DB_PORT,
+  database: process.env.DB_NAME || 'permisos_db',
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
 // Comprimir imagen antes de enviar a n8n (máx 1.0 MB para imágenes, PDFs pasan si caben)
 async function comprimirBase64(base64, mime) {
   // PDFs: validar tamaño y pasar sin modificar (nginx limite ~1.2 MB)
@@ -360,11 +368,66 @@ router.get('/mis-documentos', requireAuth, requireContratista, async (req, res) 
 // ─── GET /documentos/por-empleado/:id ────────────
 router.get('/por-empleado/:id', requireAuth, async (req, res) => {
   try {
+    const id = req.params.id;
+
+    // Verificar si el trabajador es invitado (pase de visita)
+    const tRes = await poolDoc.query(
+      'SELECT es_invitado, nombre, apellido FROM trabajadores WHERE id=$1',
+      [id]
+    );
+
+    if (tRes.rows.length && tRes.rows[0].es_invitado) {
+      const t = tRes.rows[0];
+      const nombreCompleto = `${t.nombre} ${t.apellido}`.trim();
+
+      const ppRes = await poolMain.query(
+        `SELECT pp.id, pp.documento, pp.documento_validado, pp.created_at,
+                p.folio
+         FROM permiso_personal pp
+         JOIN permisos p ON p.id = pp.permiso_id
+         WHERE LOWER(TRIM(pp.nombre)) = LOWER($1)
+           AND pp.documento IS NOT NULL
+         ORDER BY pp.id DESC`,
+        [nombreCompleto]
+      );
+
+      const docs = ppRes.rows.map(row => {
+        let base64 = row.documento || '';
+        let mime   = 'image/jpeg';
+
+        if (base64.startsWith('data:')) {
+          const m = base64.match(/^data:([^;]+);base64,(.+)$/);
+          if (m) { mime = m[1]; base64 = m[2]; }
+        } else {
+          if (base64.startsWith('/9j/'))     mime = 'image/jpeg';
+          else if (base64.startsWith('iVBOR')) mime = 'image/png';
+          else if (base64.startsWith('JVBERi0')) mime = 'application/pdf';
+          else if (base64.startsWith('UklGR')) mime = 'image/webp';
+        }
+
+        return {
+          id:                row.id,
+          request_id:        null,
+          doc_type:          'CREDENCIAL',
+          image_base64:      base64,
+          image_mime:        mime,
+          extracted_json:    null,
+          estado_validacion: row.documento_validado ? 'aprobado' : 'pendiente',
+          validado_por:      null,
+          observaciones:     row.folio || null,
+          created_at:        row.created_at,
+        };
+      });
+
+      return res.json({ success: true, data: docs });
+    }
+
+    // Trabajador normal — leer de tabla documentos
     const r = await poolDoc.query(
       `SELECT id, request_id, doc_type, image_base64, image_mime, extracted_json,
               estado_validacion, validado_por, observaciones, created_at
        FROM documentos WHERE empleado_id=$1 ORDER BY created_at DESC`,
-      [req.params.id]
+      [id]
     );
     res.json({ success: true, data: r.rows });
   } catch(e) {
