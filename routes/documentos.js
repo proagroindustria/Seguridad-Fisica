@@ -424,7 +424,7 @@ router.get('/por-empleado/:id', requireAuth, async (req, res) => {
       });
 
       const ppRes = await poolMain.query(
-        `SELECT pp.id, pp.documento, pp.documento_validado, pp.created_at,
+        `SELECT pp.id, pp.documento, pp.documento_validado, pp.creado_en AS created_at,
                 p.folio
          FROM permiso_personal pp
          JOIN permisos p ON p.id = pp.permiso_id
