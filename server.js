@@ -390,6 +390,36 @@ async function limpiarTrabajadoresSinPermiso() {
 }
 
 
+// -----------------------------------------------------------------------------
+// Supresión de documentos de identidad de pases de visita vencidos.
+// Solo borra la columna `documento` de permiso_personal cuando el permiso
+// ya está en estado 'vencido' y es un pase de visita. No elimina la fila
+// (se conserva el registro para trazabilidad) ni toca datos biométricos
+// (los invitados no tienen rostro enrolado).
+// -----------------------------------------------------------------------------
+async function limpiarDocumentosVisitas() {
+  try {
+    const r = await poolCron.query(`
+      UPDATE permiso_personal
+      SET documento = NULL
+      WHERE documento IS NOT NULL
+        AND permiso_id IN (
+          SELECT id FROM permisos
+          WHERE es_pase_visita = true
+            AND estado = 'vencido'
+        )
+      RETURNING permiso_id
+    `);
+    if (r.rowCount > 0) {
+      console.log(`🗑️  Docs de visitas limpiados: ${r.rowCount} registro(s).`);
+    } else {
+      console.log(`🗑️  Docs de visitas: sin documentos que limpiar.`);
+    }
+  } catch(e) {
+    console.error('❌ Error limpiando documentos de visitas:', e.message);
+  }
+}
+
 function programarVencimiento() {
   const ahora     = new Date();
   const proxima1AM = new Date();
@@ -406,10 +436,12 @@ function programarVencimiento() {
   setTimeout(async () => {
     await vencerPermisosExpirados();
     await limpiarTrabajadoresSinPermiso();
+    await limpiarDocumentosVisitas();
     // Después de la primera ejecución a la 1AM, repetir cada 24h exactas
     setInterval(async () => {
       await vencerPermisosExpirados();
       await limpiarTrabajadoresSinPermiso();
+      await limpiarDocumentosVisitas();
     }, 24 * 60 * 60 * 1000);
   }, msHasta1AM);
 }
@@ -479,6 +511,7 @@ app.listen(PORT, () => {
   // Cumple con el principio de supresión oportuna (LFPDPPP Art. 11).
   vencerPermisosExpirados();
   limpiarTrabajadoresSinPermiso();
+  limpiarDocumentosVisitas();
 
   // Programa la supresión automática diaria a las 01:00 h (hora del servidor).
   programarVencimiento();
