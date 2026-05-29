@@ -369,16 +369,59 @@ router.get('/mis-documentos', requireAuth, requireContratista, async (req, res) 
 router.get('/por-empleado/:id', requireAuth, async (req, res) => {
   try {
     const id = req.params.id;
+    console.log(`\n[POR-EMPLEADO] ── id recibido: "${id}"`);
 
     // Verificar si el trabajador es invitado (pase de visita)
     const tRes = await poolDoc.query(
       'SELECT es_invitado, nombre, apellido FROM trabajadores WHERE id=$1',
       [id]
     );
+    console.log(`[POR-EMPLEADO] trabajador encontrado en reconocimiento_db: ${tRes.rows.length} fila(s)`);
 
-    if (tRes.rows.length && tRes.rows[0].es_invitado) {
-      const t = tRes.rows[0];
+    if (tRes.rows.length === 0) {
+      console.log(`[POR-EMPLEADO] ⚠ No existe trabajador con id=${id}`);
+      return res.json({ success: true, data: [] });
+    }
+
+    const t = tRes.rows[0];
+    console.log(`[POR-EMPLEADO] nombre="${t.nombre}" apellido="${t.apellido}" es_invitado=${t.es_invitado}`);
+
+    if (t.es_invitado) {
       const nombreCompleto = `${t.nombre} ${t.apellido}`.trim();
+      console.log(`[POR-EMPLEADO] → Es INVITADO. Buscando en permiso_personal por nombre="${nombreCompleto}"`);
+
+      // Verificar columnas disponibles en permiso_personal
+      let columnasDisponibles = [];
+      try {
+        const colRes = await poolMain.query(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_name = 'permiso_personal' ORDER BY ordinal_position`
+        );
+        columnasDisponibles = colRes.rows.map(r => r.column_name);
+        console.log(`[POR-EMPLEADO] columnas en permiso_personal: ${columnasDisponibles.join(', ')}`);
+      } catch(eCol) {
+        console.error(`[POR-EMPLEADO] ❌ Error consultando columnas de permiso_personal:`, eCol.message);
+      }
+
+      const tieneDocumento = columnasDisponibles.includes('documento');
+      console.log(`[POR-EMPLEADO] ¿columna "documento" existe?: ${tieneDocumento}`);
+
+      if (!tieneDocumento) {
+        console.log(`[POR-EMPLEADO] ❌ La columna "documento" NO existe en permiso_personal. Devolviendo vacío.`);
+        return res.json({ success: true, data: [] });
+      }
+
+      // Buscar sin filtro de documento IS NOT NULL para ver todos los registros
+      const ppDebug = await poolMain.query(
+        `SELECT pp.id, pp.nombre, pp.documento IS NOT NULL as tiene_doc, pp.trabajador_id
+         FROM permiso_personal pp
+         WHERE LOWER(TRIM(pp.nombre)) = LOWER($1)`,
+        [nombreCompleto]
+      );
+      console.log(`[POR-EMPLEADO] registros en permiso_personal con nombre="${nombreCompleto}": ${ppDebug.rows.length}`);
+      ppDebug.rows.forEach((r, i) => {
+        console.log(`  [${i}] id=${r.id} nombre="${r.nombre}" tiene_doc=${r.tiene_doc} trabajador_id=${r.trabajador_id}`);
+      });
 
       const ppRes = await poolMain.query(
         `SELECT pp.id, pp.documento, pp.documento_validado, pp.created_at,
@@ -390,6 +433,7 @@ router.get('/por-empleado/:id', requireAuth, async (req, res) => {
          ORDER BY pp.id DESC`,
         [nombreCompleto]
       );
+      console.log(`[POR-EMPLEADO] registros con documento IS NOT NULL: ${ppRes.rows.length}`);
 
       const docs = ppRes.rows.map(row => {
         let base64 = row.documento || '';
@@ -399,12 +443,13 @@ router.get('/por-empleado/:id', requireAuth, async (req, res) => {
           const m = base64.match(/^data:([^;]+);base64,(.+)$/);
           if (m) { mime = m[1]; base64 = m[2]; }
         } else {
-          if (base64.startsWith('/9j/'))     mime = 'image/jpeg';
+          if (base64.startsWith('/9j/'))      mime = 'image/jpeg';
           else if (base64.startsWith('iVBOR')) mime = 'image/png';
           else if (base64.startsWith('JVBERi0')) mime = 'application/pdf';
           else if (base64.startsWith('UklGR')) mime = 'image/webp';
         }
 
+        console.log(`[POR-EMPLEADO] doc id=${row.id} folio=${row.folio} mime=${mime} base64_len=${base64.length}`);
         return {
           id:                row.id,
           request_id:        null,
@@ -419,18 +464,23 @@ router.get('/por-empleado/:id', requireAuth, async (req, res) => {
         };
       });
 
+      console.log(`[POR-EMPLEADO] ✅ Devolviendo ${docs.length} documento(s) para invitado`);
       return res.json({ success: true, data: docs });
     }
 
     // Trabajador normal — leer de tabla documentos
+    console.log(`[POR-EMPLEADO] → Es trabajador NORMAL. Buscando en documentos WHERE empleado_id=${id}`);
     const r = await poolDoc.query(
       `SELECT id, request_id, doc_type, image_base64, image_mime, extracted_json,
               estado_validacion, validado_por, observaciones, created_at
        FROM documentos WHERE empleado_id=$1 ORDER BY created_at DESC`,
       [id]
     );
+    console.log(`[POR-EMPLEADO] ✅ Devolviendo ${r.rows.length} documento(s) para trabajador normal`);
     res.json({ success: true, data: r.rows });
   } catch(e) {
+    console.error(`[POR-EMPLEADO] ❌ ERROR:`, e.message);
+    console.error(e.stack);
     res.status(500).json({ success: false, error: e.message });
   }
 });
