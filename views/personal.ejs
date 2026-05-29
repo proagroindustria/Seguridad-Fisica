@@ -517,7 +517,7 @@
             return '<div style="padding:12px;border:1px solid var(--border);margin-bottom:8px">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
               '<div style="display:flex;gap:8px;align-items:center">' +
-                '<span style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:var(--text)">' + (doc.doc_type||'Procesando...') + '</span>' +
+                '<span style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:var(--text)">' + (doc.doc_type||'') + '</span>' +
              
                 '</div>' +
               '<span style="font-size:11px;color:var(--text-3);font-family:Share Tech Mono,monospace">' + (doc.created_at ? new Date(doc.created_at).toLocaleDateString('es-MX') : '') + '</span>' +
