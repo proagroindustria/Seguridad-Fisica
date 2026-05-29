@@ -2017,7 +2017,7 @@ lotes.forEach(lote => {
     }
 
     if (solicitud.estado === 'activo') {
-      acciones.innerHTML += `<a href="/solicitudes/${solicitud.id}/credenciales" target="_blank" class="btn-qr" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">📄 DESCARGAR PASE EN PDF</a>`;
+      acciones.innerHTML += `<a href="/solicitudes/${solicitud.id}/credenciales" target="_blank" class="btn-qr" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">📄 DESCARGAR PASE </a>`;
     }
 
     // Mostrar botón extender si está activo
