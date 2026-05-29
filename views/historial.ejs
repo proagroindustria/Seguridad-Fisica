@@ -126,8 +126,6 @@
                 <th>EMPLEADO</th>
                 <th>ÁREA</th>
                 <th>EMPRESA</th>
-                <th>SIMILITUD</th>
-                <th>IP</th>
               </tr>
             </thead>
             <tbody id="histTbody"></tbody>
@@ -184,7 +182,7 @@
 
       filtradosActual = allAccesos.filter(a => {
         const nombre = (a.nombre_completo||'').toLowerCase();
-        return (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
+        return a.resultado === 'exitoso' && (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
       });
 
       document.getElementById('totalHistorial').textContent = filtradosActual.length + ' registro(s)';
@@ -269,8 +267,6 @@
           '<td style="font-weight:500;color:var(--text)">' + nombre + '</td>' +
           '<td style="color:var(--text-2)">' + (a.area||'—') + '</td>' +
           '<td style="color:var(--text-2)">' + (a.empresa||'—') + '</td>' +
-          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + similitud + '</td>' +
-          '<td style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text-3)">' + (a.ip_origen||'—') + '</td>' +
         '</tr>';
       }).join('');
     }
