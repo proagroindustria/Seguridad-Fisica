@@ -175,14 +175,26 @@ router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
     }
 
     const similitud = parseFloat((1 - mejorDistancia).toFixed(4));
-    const validacion = await validarAccesoTrabajador(mejorMatch.id);
 
-    if (!validacion.permitido) {
-      await poolFacial.query(
-        `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,'fallido',$2,$3,$4,'entrada',NOW(),$5,$6,$7)`,
-        [mejorMatch.id, similitud, ip, userAgent, `${mejorMatch.nombre} ${mejorMatch.apellido}`, mejorMatch.area, mejorMatch.empresa]
-      );
-      return res.json({ acceso: 'denegado', acceso_denegado: true, razon: validacion.razon, detalle: validacion.detalle, nombre: `${mejorMatch.nombre} ${mejorMatch.apellido}` });
+    // Verificar si la persona está adentro (último acceso exitoso = entrada)
+    // Si está adentro, permitir la salida aunque su permiso ya haya vencido
+    const ultimoAcceso = await poolFacial.query(
+      `SELECT tipo_movimiento FROM accesos WHERE empleado_id=$1 AND resultado='exitoso' ORDER BY fecha_hora DESC LIMIT 1`,
+      [mejorMatch.id]
+    );
+    const estaAdentro = ultimoAcceso.rows.length > 0 && ultimoAcceso.rows[0].tipo_movimiento === 'entrada';
+    const tipo_movimiento = estaAdentro ? 'salida' : 'entrada';
+
+    if (!estaAdentro) {
+      // Solo validar permiso vigente si va a entrar (no si va a salir)
+      const validacion = await validarAccesoTrabajador(mejorMatch.id);
+      if (!validacion.permitido) {
+        await poolFacial.query(
+          `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,'fallido',$2,$3,$4,'entrada',NOW(),$5,$6,$7)`,
+          [mejorMatch.id, similitud, ip, userAgent, `${mejorMatch.nombre} ${mejorMatch.apellido}`, mejorMatch.area, mejorMatch.empresa]
+        );
+        return res.json({ acceso: 'denegado', acceso_denegado: true, razon: validacion.razon, detalle: validacion.detalle, nombre: `${mejorMatch.nombre} ${mejorMatch.apellido}` });
+      }
     }
 
     const nombreCompleto = `${mejorMatch.nombre} ${mejorMatch.apellido}`;
@@ -194,12 +206,6 @@ router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
       [hoy, nombreCompleto]
     );
     const solicitud = solicitudResult.rows[0] || null;
-
-    const ultimoAcceso = await poolFacial.query(
-      `SELECT tipo_movimiento FROM accesos WHERE empleado_id=$1 AND resultado='exitoso' AND DATE(fecha_hora)=CURRENT_DATE ORDER BY fecha_hora DESC LIMIT 1`,
-      [mejorMatch.id]
-    );
-    const tipo_movimiento = (ultimoAcceso.rows.length === 0 || ultimoAcceso.rows[0].tipo_movimiento === 'salida') ? 'entrada' : 'salida';
 
     await poolFacial.query(
       `INSERT INTO accesos (empleado_id, resultado, similitud, ip_origen, user_agent, tipo_movimiento, permiso_id, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$9,$10)`,
