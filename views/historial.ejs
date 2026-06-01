@@ -271,8 +271,11 @@
     }
 
     function exportarExcel() {
-      if (!allAccesos.length) { alert('No hay datos para exportar'); return; }
-      const ws = XLSX.utils.json_to_sheet(allAccesos.filter(a => a.resultado === 'exitoso').map(a => ({
+      const datos = (filtradosActual.length ? filtradosActual : allAccesos).filter(a => a.resultado === 'exitoso');
+      if (!datos.length) { alert('No hay datos para exportar'); return; }
+      const busq = document.getElementById('searchHistorial').value.trim();
+      const sufijo = busq ? '_' + busq.replace(/\s+/g, '_').toUpperCase() : '';
+      const ws = XLSX.utils.json_to_sheet(datos.map(a => ({
         'Fecha/Hora': a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX') : '',
         'Movimiento': a.tipo_movimiento,
         'Empleado':   a.nombre_completo || '',
@@ -283,7 +286,7 @@
       })));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Accesos');
-      XLSX.writeFile(wb, 'PROAGRO_Accesos_' + new Date().toLocaleDateString('es-MX').replace(/\//g,'-') + '.xlsx');
+      XLSX.writeFile(wb, 'PROAGRO_Accesos' + sufijo + '_' + new Date().toLocaleDateString('es-MX').replace(/\//g,'-') + '.xlsx');
     }
 
     cargarHistorial();
