@@ -235,15 +235,87 @@ const poolFacialCron = new Pool({
 // durante la vigencia del permiso autorizado.
 // =============================================================================
 
+// Devuelve true si alguna persona del permiso tiene su último acceso como 'entrada' (sigue adentro)
+async function algunoAdentro(permisoId) {
+  try {
+    const personal = await poolCron.query(
+      `SELECT nombre, trabajador_id FROM permiso_personal WHERE permiso_id = $1`,
+      [permisoId]
+    );
+
+    for (const p of personal.rows) {
+      let empleadoId = p.trabajador_id || null;
+
+      // Si no hay trabajador_id, buscar por nombre en reconocimiento_db
+      if (!empleadoId && p.nombre) {
+        const partes = p.nombre.trim().split(/\s+/);
+        const nom = partes[0] || '';
+        const ape = partes.slice(1).join(' ') || '';
+        const tRes = await poolFacialCron.query(
+          `SELECT id FROM trabajadores
+           WHERE activo = true
+             AND LOWER(TRIM(nombre))   = LOWER($1)
+             AND LOWER(TRIM(apellido)) = LOWER($2)
+           LIMIT 1`,
+          [nom, ape]
+        );
+        if (tRes.rows.length > 0) empleadoId = tRes.rows[0].id;
+      }
+
+      if (!empleadoId) continue;
+
+      // Revisar si el último acceso exitoso fue 'entrada'
+      const ultimo = await poolFacialCron.query(
+        `SELECT tipo_movimiento FROM accesos
+         WHERE empleado_id = $1 AND resultado = 'exitoso'
+         ORDER BY fecha_hora DESC LIMIT 1`,
+        [empleadoId]
+      );
+
+      if (ultimo.rows.length > 0 && ultimo.rows[0].tipo_movimiento === 'entrada') {
+        console.log(`⚠ ${p.nombre} sigue adentro (último acceso: entrada) — permiso ${permisoId} bloqueado`);
+        return true;
+      }
+    }
+    return false;
+  } catch(e) {
+    console.error(`❌ algunoAdentro(${permisoId}):`, e.message);
+    return false; // En caso de error, permitir vencer para no bloquear indefinidamente
+  }
+}
+
 async function vencerPermisosExpirados() {
   try {
-    const r = await poolCron.query(`
-      UPDATE permisos
-      SET estado = 'vencido', actualizado_en = NOW()
+    // Obtener candidatos uno a uno para poder verificar si hay gente adentro
+    const candidatos = await poolCron.query(`
+      SELECT id, folio, es_pase_visita
+      FROM permisos
       WHERE estado NOT IN ('rechazado', 'vencido')
         AND fecha_fin < CURRENT_DATE
-      RETURNING id, folio, es_pase_visita
     `);
+
+    if (candidatos.rowCount === 0) {
+      console.log('⏰ Auto-vencimiento: sin permisos que vencer.');
+      return;
+    }
+
+    const r = { rows: [], rowCount: 0 };
+
+    for (const permiso of candidatos.rows) {
+      const bloqueado = await algunoAdentro(permiso.id);
+      if (bloqueado) {
+        console.log(`⏳ Permiso ${permiso.folio} expiró pero hay personal aún adentro — se vencerá cuando todos salgan`);
+        continue;
+      }
+
+      await poolCron.query(
+        `UPDATE permisos SET estado = 'vencido', actualizado_en = NOW() WHERE id = $1`,
+        [permiso.id]
+      );
+      r.rows.push(permiso);
+      r.rowCount++;
+    }
+
     if (r.rowCount > 0) {
       console.log(`⏰ Auto-vencimiento: ${r.rowCount} permiso(s) vencido(s):`, r.rows.map(x => x.folio).join(', '));
 
@@ -421,29 +493,43 @@ async function limpiarDocumentosVisitas() {
 }
 
 function programarVencimiento() {
-  const ahora     = new Date();
-  const proxima1AM = new Date();
-  proxima1AM.setHours(1, 0, 0, 0); // 1:00:00 AM
+  const ahora = new Date();
+  const proxima0002 = new Date();
+  proxima0002.setHours(0, 2, 0, 0); // 00:02:00
 
-  // Si ya pasó la 1:00 AM de hoy, programar para mañana
-  if (ahora >= proxima1AM) {
-    proxima1AM.setDate(proxima1AM.getDate() + 1);
+  // Si ya pasó las 00:02 de hoy, programar para mañana
+  if (ahora >= proxima0002) {
+    proxima0002.setDate(proxima0002.getDate() + 1);
   }
 
-  const msHasta1AM = proxima1AM - ahora;
-  console.log(`⏰ Próximo auto-vencimiento programado: ${proxima1AM.toLocaleString('es-MX')}`);
+  const msHasta0002 = proxima0002 - ahora;
+  console.log(`⏰ Próximo auto-vencimiento programado: ${proxima0002.toLocaleString('es-MX')}`);
 
   setTimeout(async () => {
     await vencerPermisosExpirados();
     await limpiarTrabajadoresSinPermiso();
     await limpiarDocumentosVisitas();
-    // Después de la primera ejecución a la 1AM, repetir cada 24h exactas
+    // Repetir cada 24h
     setInterval(async () => {
       await vencerPermisosExpirados();
       await limpiarTrabajadoresSinPermiso();
       await limpiarDocumentosVisitas();
     }, 24 * 60 * 60 * 1000);
-  }, msHasta1AM);
+  }, msHasta0002);
+
+  // Check cada 15 minutos para permisos vencidos que tenían gente adentro
+  setInterval(async () => {
+    const hay = await poolCron.query(`
+      SELECT COUNT(*) AS cnt FROM permisos
+      WHERE estado NOT IN ('rechazado','vencido') AND fecha_fin < CURRENT_DATE
+    `).catch(() => ({ rows: [{ cnt: 0 }] }));
+    if (parseInt(hay.rows[0].cnt) > 0) {
+      console.log('⏰ Check periódico: hay permisos vencidos pendientes — verificando salidas...');
+      await vencerPermisosExpirados();
+      await limpiarTrabajadoresSinPermiso();
+      await limpiarDocumentosVisitas();
+    }
+  }, 15 * 60 * 1000); // cada 15 minutos
 }
 
 const poolMigration = require('./db/connection');
