@@ -171,7 +171,7 @@ router.post('/verificar', requireAuth, requireSeguridad, async (req, res) => {
         `INSERT INTO accesos (resultado, ip_origen, user_agent, tipo_movimiento, fecha_hora) VALUES ($1,$2,$3,$4,NOW())`,
         ['fallido', ip, userAgent, 'entrada']
       );
-      return res.status(401).json({ acceso: 'denegado', mensaje: 'Rostro no reconocido' });
+      return res.json({ acceso: 'denegado', mensaje: 'Rostro no reconocido' });
     }
 
     const similitud = parseFloat((1 - mejorDistancia).toFixed(4));
