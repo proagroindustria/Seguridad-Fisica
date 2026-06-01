@@ -99,7 +99,7 @@
         <div class="filter-bar" style="flex-wrap:wrap;gap:10px">
           <div class="search-box" style="min-width:200px">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input type="text" id="searchHistorial" placeholder="Buscar por nombre..." oninput="filtrarHistorial()">
+            <input type="text" id="searchHistorial" placeholder="Buscar por nombre o empresa..." oninput="filtrarHistorial()">
           </div>
           <select id="filtroMovimiento" onchange="filtrarHistorial()"
             style="padding:9px 14px;background:var(--bg-2);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px">
@@ -180,8 +180,9 @@
       const mov  = document.getElementById('filtroMovimiento').value;
 
       filtradosActual = allAccesos.filter(a => {
-        const nombre = (a.nombre_completo||'').toLowerCase();
-        return a.resultado === 'exitoso' && (!busq || nombre.includes(busq)) && (!mov || a.tipo_movimiento === mov);
+        const nombre  = (a.nombre_completo||'').toLowerCase();
+        const empresa = (a.empresa||'').toLowerCase();
+        return a.resultado === 'exitoso' && (!busq || nombre.includes(busq) || empresa.includes(busq)) && (!mov || a.tipo_movimiento === mov);
       });
 
       document.getElementById('totalHistorial').textContent = filtradosActual.length + ' registro(s)';
@@ -271,10 +272,9 @@
 
     function exportarExcel() {
       if (!allAccesos.length) { alert('No hay datos para exportar'); return; }
-      const ws = XLSX.utils.json_to_sheet(allAccesos.map(a => ({
+      const ws = XLSX.utils.json_to_sheet(allAccesos.filter(a => a.resultado === 'exitoso').map(a => ({
         'Fecha/Hora': a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-MX') : '',
         'Movimiento': a.tipo_movimiento,
-        'Resultado':  a.resultado,
         'Empleado':   a.nombre_completo || '',
         'Área':       a.area || '',
         'Empresa':    a.empresa || '',
