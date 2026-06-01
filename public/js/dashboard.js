@@ -3539,20 +3539,29 @@ async function cargarNotificaciones() {
     if (!badge) return;
 
     if (USER_ROL === 'seguridad_fisica') {
-      const rCheckin = await fetch('/facial/notificaciones-sin-checkin')
-        .then(r => r.json())
-        .catch(() => ({ success: false, data: [], total: 0 }));
+      const [rCheckin, rVencer] = await Promise.all([
+        fetch('/facial/notificaciones-sin-checkin').then(r => r.json()).catch(() => ({ success: false, data: [] })),
+        fetch('/solicitudes/proximas-a-vencer').then(r => r.json()).catch(() => ({ success: false, data: [] }))
+      ]);
 
       const items = rCheckin.success ? (rCheckin.data || []) : [];
+      const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+      const vencerItems = (rVencer.success ? (rVencer.data || []) : []).filter(p => {
+        const fechaFin = new Date(String(p.fecha_fin || '').slice(0, 10) + 'T12:00:00');
+        const dias = Math.round((fechaFin - hoy) / (1000 * 60 * 60 * 24));
+        return dias >= 0 && dias <= 3;
+      });
 
-      if (items.length === 0) {
+      const total = items.length + vencerItems.length;
+
+      if (total === 0) {
         badge.style.display = 'none';
         if (lista)   lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">✅ Sin alertas.</div>';
         if (totalEl) totalEl.textContent = '0 alertas';
         return;
       }
 
-      const html = items.map(t => {
+      const htmlCheckin = items.map(t => {
         const ultimoTxt = t.ultimo_acceso
           ? new Date(t.ultimo_acceso).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
           : 'Nunca ha checado';
@@ -3567,10 +3576,25 @@ async function cargarNotificaciones() {
         </div>`;
       }).join('');
 
+      const htmlVencer = vencerItems.map(p => {
+        const fechaFin = new Date(String(p.fecha_fin || '').slice(0, 10) + 'T12:00:00');
+        const diasRestantes = Math.round((fechaFin - hoy) / (1000 * 60 * 60 * 24));
+        const diasTxt = diasRestantes === 0 ? 'VENCE HOY' : diasRestantes === 1 ? 'VENCE EN 1 DÍA' : `VENCE EN ${diasRestantes} DÍAS`;
+        const color = diasRestantes === 0 ? '#ef4444' : '#f59e0b';
+        return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:4px;border-left:3px solid ${color}">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:600;color:var(--text);font-size:13px">📋 ${p.folio}</span>
+            <span style="font-size:10px;padding:2px 8px;background:rgba(245,158,11,0.1);border:1px solid ${color};color:${color};font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${diasTxt}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Solicitud próxima a vencer</div>
+          <div style="font-size:11px;color:${color};font-family:'Share Tech Mono',monospace">Vence: ${fechaFin.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</div>
+        </div>`;
+      }).join('');
+
       badge.style.display = 'flex';
-      badge.textContent = items.length > 9 ? '9+' : items.length;
-      if (totalEl) totalEl.textContent = items.length + ' alerta' + (items.length !== 1 ? 's' : '');
-      if (lista)   lista.innerHTML = html;
+      badge.textContent = total > 9 ? '9+' : total;
+      if (totalEl) totalEl.textContent = total + ' alerta' + (total !== 1 ? 's' : '');
+      if (lista)   lista.innerHTML = htmlCheckin + htmlVencer;
 
     } else {
       // contratista: solicitudes próximas a vencer
