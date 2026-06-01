@@ -285,6 +285,7 @@ async function algunoAdentro(permisoId) {
 }
 
 async function vencerPermisosExpirados() {
+  console.log('⏰ [v2-con-check-salidas] vencerPermisosExpirados iniciado');
   try {
     // Obtener candidatos uno a uno para poder verificar si hay gente adentro
     const candidatos = await poolCron.query(`
@@ -298,6 +299,7 @@ async function vencerPermisosExpirados() {
       console.log('⏰ Auto-vencimiento: sin permisos que vencer.');
       return;
     }
+    console.log(`⏰ Candidatos a vencer: ${candidatos.rows.map(r => r.folio).join(', ')}`);
 
     const r = { rows: [], rowCount: 0 };
 
