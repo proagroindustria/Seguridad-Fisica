@@ -3608,6 +3608,7 @@ async function cargarNotificaciones() {
             <span style="font-size:10px;padding:2px 8px;background:rgba(245,158,11,0.1);border:1px solid ${color};color:${color};font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.5px">${diasTxt.toUpperCase()}</span>
           </div>
           <div style="font-size:11px;color:var(--text-3);font-family:'Share Tech Mono',monospace">Solicitud próxima a vencer · ${p.empresa}</div>
+          <div style="font-size:11px;color:${color};font-family:'Share Tech Mono',monospace">Vence: ${fechaFin.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</div>
         </div>`;
       }).join('');
 
