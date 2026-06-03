@@ -264,16 +264,16 @@ async function algunoAdentro(permisoId) {
 
       if (!empleadoId) continue;
 
-      // Revisar si el último acceso exitoso fue 'entrada'
-      const ultimo = await poolFacialCron.query(
+      // Verificar si entró usando ESTE permiso y no ha salido
+      const entroConEstePermiso = await poolFacialCron.query(
         `SELECT tipo_movimiento FROM accesos
-         WHERE empleado_id = $1 AND resultado = 'exitoso'
+         WHERE empleado_id = $1 AND permiso_id = $2 AND resultado = 'exitoso'
          ORDER BY fecha_hora DESC LIMIT 1`,
-        [empleadoId]
+        [empleadoId, permisoId]
       );
 
-      if (ultimo.rows.length > 0 && ultimo.rows[0].tipo_movimiento === 'entrada') {
-        console.log(`⚠ ${p.nombre} sigue adentro (último acceso: entrada) — permiso ${permisoId} bloqueado`);
+      if (entroConEstePermiso.rows.length > 0 && entroConEstePermiso.rows[0].tipo_movimiento === 'entrada') {
+        console.log(`⚠ ${p.nombre} sigue adentro con permiso ${permisoId} — bloqueado`);
         return true;
       }
     }
