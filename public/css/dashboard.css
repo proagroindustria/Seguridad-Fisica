@@ -1167,6 +1167,9 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
   .dnd-form-row { grid-template-columns: 1fr; }
   .dnd-palette { gap: 6px; }
 
+  /* Tabla de secciones con scroll horizontal */
+  .sec-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
   /* Facial */
   .facial-form-grid { grid-template-columns: 1fr; }
 }
@@ -1233,10 +1236,33 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
     min-width: unset;
     flex-direction: row;
     justify-content: flex-start;
+    align-items: stretch;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 0 0 0 12px;
+    min-height: 60px;
   }
-  .dnd-card-info { text-align: left; }
+  .dnd-card-icon { align-self: center; }
+  .dnd-card-info { text-align: left; align-self: center; padding: 10px 0; }
+
+  /* Handle de arrastre: bloque táctil ancho a la derecha (44px mínimo) */
+  .dnd-drag-handle {
+    position: static;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    margin-left: auto;
+    font-size: 22px;
+    letter-spacing: 0;
+    background: var(--bg-3);
+    border-left: 1px solid var(--border);
+    cursor: grab;
+    padding: 0;
+  }
+
+  /* Tabla de secciones con scroll horizontal en móvil */
+  .sec-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
   /* Botón primario sin clip-path (evita que el área táctil se recorte) */
   .btn-primary { clip-path: none; padding: 10px 16px; }
