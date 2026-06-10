@@ -1444,14 +1444,14 @@ async function comprimirImagenVehiculo(file) {
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let w = img.width, h = img.height;
-        const MAX = 1200;
+        const MAX = 1800;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
           else       { w = Math.round(w * MAX / h); h = MAX; }
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
+        resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
       };
       img.src = e.target.result;
     };
