@@ -548,7 +548,7 @@ const SECTION_COLS = {
     { id: 'modelo',   label: 'MODELO',   placeholder: 'Ej. Hilux',     type: 'text', required: true },
     { id: 'placas',   label: 'PLACAS',   placeholder: 'Ej. ABC-123-D', type: 'text', required: true },
     { id: 'seguro',   label: 'SEGURO',   placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
-    { id: 'tarjeta_circulacion', label: 'TARJETA CIRC.', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
+    { id: 'tarjeta_circulacion', label: 'TARJETA DE CIRCULACIÓN', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
     { id: 'licencia', label: 'LICENCIA', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' }
   ],
 
@@ -2015,7 +2015,7 @@ lotes.forEach(lote => {
         ${solicitud.responsable1_tel ? `<div class="detalle-field"><div class="detalle-field-label">TEL. RESPONSABLE 1</div><div class="detalle-field-value mono">${escapeHtml(solicitud.responsable1_tel)}</div></div>` : ''}
         <div class="detalle-field"><div class="detalle-field-label">RESPONSABLE CONTRATISTA 2</div><div class="detalle-field-value">${escapeHtml(solicitud.responsable2||'—')}</div></div>
         ${solicitud.responsable2_tel ? `<div class="detalle-field"><div class="detalle-field-label">TEL. RESPONSABLE 2</div><div class="detalle-field-value mono">${escapeHtml(solicitud.responsable2_tel)}</div></div>` : ''}
-        ${solicitud.motivo_visita ? `<div class="detalle-field" style="grid-column:span 3"><div class="detalle-field-label">MOTIVO DE VISITA</div><div class="detalle-field-value">${escapeHtml(solicitud.motivo_visita)}</div></div>` : ''}
+        <div class="detalle-field" style="grid-column:span 3"><div class="detalle-field-label">MOTIVO DE VISITA</div><div class="detalle-field-value">${escapeHtml(solicitud.motivo_visita||'—')}</div></div>
         <div class="detalle-field"><div class="detalle-field-label">FECHA INICIO</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_inicio)}</div></div>
         <div class="detalle-field"><div class="detalle-field-label">FECHA FIN</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_fin)}</div></div>
        
