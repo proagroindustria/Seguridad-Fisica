@@ -768,8 +768,10 @@ function verificarBotonSubmit() {
   const personalDocNoValidado = isPaseVisitaActive() && filasPersonal.length > 0 &&
     filasPersonal.some(f => f._docInlineValidado !== true);
 
+  const motivoVisita = document.getElementById('motivo_visita')?.value?.trim() || '';
+
   const contratoOk = isPaseVisitaActive() || !!contrato;
-  const listo = empresa && contratoOk && responsable && resp1Val && fechaInicio && fechaFin && fechasValidas && vehiculosValidos && !personalBloqueado && !personalNoEnrolado && !personalDocVencido && !personalDocNoValidado && tel1Ok && tel2Ok;
+  const listo = empresa && contratoOk && responsable && resp1Val && fechaInicio && fechaFin && fechasValidas && vehiculosValidos && !personalBloqueado && !personalNoEnrolado && !personalDocVencido && !personalDocNoValidado && tel1Ok && tel2Ok && !!motivoVisita;
 
   btn.disabled = !listo;
   btn.style.opacity = listo ? '1' : '0.4';
@@ -1668,6 +1670,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fecha_inicio: document.getElementById('fecha_inicio').value,
         fecha_fin: document.getElementById('fecha_fin').value,
         secciones: seccionesAgregadas,
+        motivo_visita: document.getElementById('motivo_visita')?.value?.trim() || null,
         firma_creacion_ubicacion: _ubicacionActual || 'No disponible',
         firma_creacion_ip_privada: ipPrivada,
         es_pase_visita: isPaseVisitaActive()
@@ -2064,6 +2067,7 @@ lotes.forEach(lote => {
         ${solicitud.responsable1_tel ? `<div class="detalle-field"><div class="detalle-field-label">TEL. RESPONSABLE 1</div><div class="detalle-field-value mono">${escapeHtml(solicitud.responsable1_tel)}</div></div>` : ''}
         <div class="detalle-field"><div class="detalle-field-label">RESPONSABLE CONTRATISTA 2</div><div class="detalle-field-value">${escapeHtml(solicitud.responsable2||'—')}</div></div>
         ${solicitud.responsable2_tel ? `<div class="detalle-field"><div class="detalle-field-label">TEL. RESPONSABLE 2</div><div class="detalle-field-value mono">${escapeHtml(solicitud.responsable2_tel)}</div></div>` : ''}
+        ${solicitud.motivo_visita ? `<div class="detalle-field" style="grid-column:span 3"><div class="detalle-field-label">MOTIVO DE VISITA</div><div class="detalle-field-value">${escapeHtml(solicitud.motivo_visita)}</div></div>` : ''}
         <div class="detalle-field"><div class="detalle-field-label">FECHA INICIO</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_inicio)}</div></div>
         <div class="detalle-field"><div class="detalle-field-label">FECHA FIN</div><div class="detalle-field-value">${formatFecha(solicitud.fecha_fin)}</div></div>
        

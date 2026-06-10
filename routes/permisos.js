@@ -468,7 +468,7 @@ router.post('/', requireAuth, async (req, res) => {
   if (user.rol !== 'contratista') return res.status(403).json({ success: false, error: 'Solo contratistas pueden crear solicitudes.' });
   
 
-  const { empresa, contrato, fecha_inicio, fecha_fin, secciones, responsable_contrato, responsable1, responsable2, responsable1_tel, responsable2_tel, firma_creacion_ubicacion, firma_creacion_ip_privada, es_pase_visita } = req.body;
+  const { empresa, contrato, fecha_inicio, fecha_fin, secciones, responsable_contrato, responsable1, responsable2, responsable1_tel, responsable2_tel, motivo_visita, firma_creacion_ubicacion, firma_creacion_ip_privada, es_pase_visita } = req.body;
   
 
   //if (!empresa || !contrato || !fecha_inicio || !fecha_fin) return res.status(400).json({ success: false, error: 'Todos los campos son requeridos.' });
@@ -487,9 +487,9 @@ router.post('/', requireAuth, async (req, res) => {
     const usuario_creacion = user.username || null;
 
     const r1 = await pool.query(
-      `INSERT INTO permisos (folio, empresa, contrato, responsable_contrato, responsable1, responsable2, responsable1_tel, responsable2_tel, fecha_inicio, fecha_fin, estado, creado_por, fecha_envio, firma_creacion_ip, firma_creacion_ip_privada, firma_creacion_ubicacion, firma_creacion_fecha, firma_creacion_usuario, es_pase_visita)
- VALUES ('TEMP',$1,$2,$3,$4,$5,$6,$7,$8,$9,'en_espera_area',$10,NOW(),$11,$12,$13,NOW(),$14,$15) RETURNING id`,
-[empresa?.trim()||null, contrato?.trim()||null, responsable_contrato||null, responsable1||null, responsable2||null, responsable1_tel||null, responsable2_tel||null, fecha_inicio||null, fecha_fin||null, user.rol === 'contratista' ? null : user.id||null, ip_creacion||null, firma_creacion_ip_privada||null, firma_creacion_ubicacion||null, usuario_creacion, es_pase_visita === true]
+      `INSERT INTO permisos (folio, empresa, contrato, responsable_contrato, responsable1, responsable2, responsable1_tel, responsable2_tel, motivo_visita, fecha_inicio, fecha_fin, estado, creado_por, fecha_envio, firma_creacion_ip, firma_creacion_ip_privada, firma_creacion_ubicacion, firma_creacion_fecha, firma_creacion_usuario, es_pase_visita)
+ VALUES ('TEMP',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'en_espera_area',$11,NOW(),$12,$13,$14,NOW(),$15,$16) RETURNING id`,
+[empresa?.trim()||null, contrato?.trim()||null, responsable_contrato||null, responsable1||null, responsable2||null, responsable1_tel||null, responsable2_tel||null, motivo_visita?.trim()||null, fecha_inicio||null, fecha_fin||null, user.rol === 'contratista' ? null : user.id||null, ip_creacion||null, firma_creacion_ip_privada||null, firma_creacion_ubicacion||null, usuario_creacion, es_pase_visita === true]
     );
     const newId = r1.rows[0].id;
     const folio = `SOL-${new Date().getFullYear()}-${String(newId).padStart(4,'0')}`;

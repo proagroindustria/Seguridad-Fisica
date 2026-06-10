@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS permisos (
     -- Motivo de rechazo (opcional)
     motivo_rechazo          TEXT,
 
+    -- Descripción del motivo de la visita
+    motivo_visita           TEXT,
+
     creado_en               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     actualizado_en          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -229,6 +232,7 @@ SELECT
     us.nombre_completo  AS aprobado_seg_nombre,
     ur.nombre_completo  AS rechazado_por_nombre,
     p.motivo_rechazo,
+    p.motivo_visita,
     p.fecha_envio,
     p.fecha_aprobacion_area,
     p.fecha_aprobacion_seg,
