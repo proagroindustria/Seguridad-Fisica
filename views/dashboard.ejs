@@ -460,12 +460,16 @@
 
         <!-- PASO 3: DRAG & DROP DE SECCIONES -->
         <div class="form-section">
-          <p class="form-section-label">— SECCIONES DE LA SOLICITUD <span class="hint-label">(arrastra para agregar)</span></p>
+          <p class="form-section-label">— SECCIONES DE LA SOLICITUD
+            <span class="hint-label dnd-hint-desktop">(arrastra para agregar)</span>
+            <span class="hint-label dnd-hint-mobile">(toca para agregar)</span>
+          </p>
 
           <!-- PALETA DE TARJETAS DISPONIBLES -->
           <div class="dnd-palette" id="dndPalette">
             <div class="dnd-card-source" draggable="true" data-type="personal"
-                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
+                 onclick="onCardTap('personal')">
               <div class="dnd-card-icon dnd-icon-personal">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -477,11 +481,15 @@
                 <span class="dnd-card-title">Personal</span>
                 <span class="dnd-card-desc">Credencial, nombre, categoría</span>
               </div>
-              <div class="dnd-drag-handle">⠿</div>
+              <div class="dnd-drag-handle">
+                <span class="drag-dots">⠿</span>
+                <span class="tap-plus">+</span>
+              </div>
             </div>
 
             <div class="dnd-card-source" draggable="true" data-type="vehiculo"
-                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
+                 onclick="onCardTap('vehiculo')">
               <div class="dnd-card-icon dnd-icon-vehiculo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="1" y="3" width="15" height="13" rx="1"/>
@@ -493,11 +501,15 @@
                 <span class="dnd-card-title">Vehículo</span>
                 <span class="dnd-card-desc">Marca, modelo, placas, seguro</span>
               </div>
-              <div class="dnd-drag-handle">⠿</div>
+              <div class="dnd-drag-handle">
+                <span class="drag-dots">⠿</span>
+                <span class="tap-plus">+</span>
+              </div>
             </div>
 
             <div class="dnd-card-source" draggable="true" data-type="equipo"
-                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+                 ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"
+                 onclick="onCardTap('equipo')">
               <div class="dnd-card-icon dnd-icon-equipo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
@@ -507,7 +519,10 @@
                 <span class="dnd-card-title">Equipo / Herramientas</span>
                 <span class="dnd-card-desc">Cantidad, descripción, marca</span>
               </div>
-              <div class="dnd-drag-handle">⠿</div>
+              <div class="dnd-drag-handle">
+                <span class="drag-dots">⠿</span>
+                <span class="tap-plus">+</span>
+              </div>
             </div>
           </div>
 

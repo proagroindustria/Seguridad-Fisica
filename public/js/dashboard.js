@@ -784,6 +784,12 @@ function verificarBotonSubmit() {
 
 
 // ===================== DRAG & DROP =====================
+function onCardTap(tipo) {
+  if (!window.matchMedia('(pointer: coarse)').matches) return;
+  if (seccionesAgregadas[tipo] !== undefined) return;
+  agregarSeccion(tipo);
+}
+
 function onDragStart(e) {
   dragType = e.currentTarget.dataset.type;
   e.currentTarget.classList.add('dragging');
