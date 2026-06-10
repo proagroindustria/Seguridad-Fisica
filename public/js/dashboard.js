@@ -1,4 +1,4 @@
-
+﻿
 /* 
   =====================================================
         PROAGRO - Dashboard JS
@@ -1233,8 +1233,7 @@ function actualizarAlertaVehiculos() {
   const problemas = [];
   filas.forEach((fila, idx) => {
     const num = idx + 1;
-    if (!fila.seguro || !fila.licencia || !fila.tarjeta_circulacion) return;
-    if (fila.validacion_series_coinciden === false) problemas.push(`Fila ${num}: SERIES NO COINCIDEN`);
+    if (!fila.seguro || !fila.licencia) return;
     if (fila.validacion_seguro_vigente   === false) problemas.push(`Fila ${num}: SEGURO VENCIDO`);
     if (fila.validacion_licencia_vigente === false) problemas.push(`Fila ${num}: LICENCIA VENCIDA`);
   });
@@ -1258,7 +1257,7 @@ function actualizarAlertaVehiculos() {
     alertEl.style.background = 'rgba(245,158,11,0.06)';
     alertEl.style.border = '1px solid #f59e0b';
     alertEl.style.padding = '10px 14px';
-    alertEl.innerHTML = '⏳ Sube y valida seguro, tarjeta de circulación y licencia de cada vehículo.';
+    alertEl.innerHTML = '⏳ Sube y valida seguro y licencia de cada vehículo.';
     btnSubmit.disabled = true;
     btnSubmit.style.opacity = '0.4';
     btnSubmit.style.cursor = 'not-allowed';
@@ -1279,40 +1278,7 @@ function actualizarAlertaVehiculos() {
 
 
 
-function revalidarTarjeta(rowId, data, row) {
-  const label = vehicValidaciones[rowId] ? vehicValidaciones[rowId]._tarjetaLabel : null;
-  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').trim();
-  const tr = document.getElementById(`row-${rowId}`);
-  const inputs = tr ? tr.querySelectorAll('.cell-input') : [];
-  let marcaDOM = '', modeloDOM = '', placasDOM = '';
-  inputs.forEach(inp => {
-    if (inp.placeholder === 'Ej. Toyota')    marcaDOM  = inp.value;
-    if (inp.placeholder === 'Ej. Hilux')     modeloDOM = inp.value;
-    if (inp.placeholder === 'Ej. ABC-123-D') placasDOM = inp.value;
-  });
-  const placasDoc = norm(data.placas || '');
-  const marcaDoc  = norm(data.marca  || '');
-  const modeloDoc = norm(data.modelo || '');
-  const errores = [];
-  if (placasDoc && norm(placasDOM) !== placasDoc) errores.push(`Placas: "${placasDOM||'—'}" vs tarjeta "${data.placas}"`);
-  //if (marcaDoc  && norm(marcaDOM)  !== marcaDoc)  errores.push(`Marca: "${marcaDOM||'—'}" vs tarjeta "${data.marca}"`);
-  //if (modeloDoc && norm(modeloDOM) !== modeloDoc) errores.push(`Modelo: "${modeloDOM||'—'}" vs tarjeta "${data.modelo}"`);
-  const vigenteTarjeta = data.vigencia_fin ? validarVigenciaPorFecha(data.vigencia_fin) : true;
-  if (errores.length > 0) {
-    vehicValidaciones[rowId].tarjeta_circulacion = false;
-    vehicValidaciones[rowId].tarjeta_error = 'DATOS NO COINCIDEN CON TARJETA';
-    if (label) label.textContent = `⚠️ Datos no coinciden: ${errores.join(' · ')}`;
-  } else if (!vigenteTarjeta) {
-    vehicValidaciones[rowId].tarjeta_circulacion = false;
-    vehicValidaciones[rowId].tarjeta_error = 'TARJETA VENCIDA';
-    if (label) label.textContent = `⚠️ Tarjeta NO VIGENTE · Vence: ${data.vigencia_fin || '—'}`;
-  } else {
-    vehicValidaciones[rowId].tarjeta_circulacion = true;
-    vehicValidaciones[rowId].tarjeta_error = null;
-    if (label) label.textContent = `✅ Tarjeta vigente · ${data.marca||'—'} ${data.modelo||'—'} · Placa: ${data.placas||'—'} · Vence: ${data.vigencia_fin||'—'}`;
-  }
-  actualizarAlertaVehiculos();
-}
+
 
 
 
@@ -1324,19 +1290,7 @@ function onCellChange(tipo, rowId, fieldId, value) {
   updateRowCount(tipo);
 
 
-  // Re-validar tarjeta si cambian marca/modelo/placas
-  if (tipo === 'vehiculo' && ['marca','modelo','placas'].includes(fieldId)) {
-    const v = vehicValidaciones[rowId];
-    if (v && v._tarjetaData) {
-      revalidarTarjeta(rowId, v._tarjetaData, row);
-    }
-  }
 }
-
-/*
-  if (tipo == 'vehiculo' && ['marca','modelo','placas'].includes(fieldId)){
-    const v = vehi
-  }*/
 
 
 
@@ -1405,13 +1359,12 @@ async function onFileChange(tipo, rowId, fieldId, input) {
     const row  = rows.find(r => r._id === rowId);
     if (row) { row[fieldId] = base64; row[`${fieldId}_mime`] = mimeFinal; row[`${fieldId}_nombre`] = file.name; }
 
-    if (label) label.textContent = '🔍 Analizando con IA...';
-
     // ── Determinar endpoint ──
     let webhookUrl = null;
     if (fieldId === 'seguro')   webhookUrl = '/api/procesar-seguro';
     if (fieldId === 'licencia') webhookUrl = '/api/procesar-licencia';
-    if (fieldId === 'tarjeta_circulacion') webhookUrl = '/api/procesar-tarjeta';
+
+    if (label) label.textContent = webhookUrl ? '🔍 Analizando con IA...' : '✅ ' + (file.name.length > 12 ? file.name.substring(0,12)+'…' : file.name);
 
     // ── Documentos de identificación de personal (INE / PASAPORTE / LICENCIA) ──
     if (tipo === 'personal' && (fieldId === 'documento_ine' || fieldId === 'documento')) {
@@ -1447,10 +1400,7 @@ async function onFileChange(tipo, rowId, fieldId, input) {
           const txt = data.vigente 
             ? `✅ ${data.nombre_conductor || '—'} · Lic: ${data.numero_licencia || '—'} · Tipo: ${data.tipo_licencia || '—'}` 
             : `⚠️ Licencia NO VIGENTE · ${data.nombre_conductor || '—'}`;
-          if (label) label.textContent = txt;          
-        } else if (fieldId === 'tarjeta_circulacion') {
-          const serie = data.numero_serie || '';
-          if (label) label.textContent = serie ? `✅ Serie: ${serie}` : `⚠️ No se pudo leer la serie`;
+          if (label) label.textContent = txt;
         }
 
 
@@ -1522,46 +1472,39 @@ function parseFecha(str) {
   return new Date(str);
 }
 
+
+
 function verificarDocumentosVehiculo(tipo, rowId) {
   const row = (seccionesAgregadas[tipo] || []).find(r => r._id === rowId);
   if (!row) return;
 
-  const segExt = row.seguro_extracted              || {};
-  const licExt = row.licencia_extracted            || {};
-  const tarExt = row.tarjeta_circulacion_extracted || {};
+  const segExt = row.seguro_extracted || {};
+  const licExt = row.licencia_extracted || {};
 
   const hoy = new Date(); hoy.setHours(0,0,0,0);
 
-  const serieSeguro  = (segExt.serie_vehiculo || '').trim().toUpperCase();
-  const serieTarjeta = (tarExt.numero_serie   || '').trim().toUpperCase();
-  const seriesCoinciden = !!(serieSeguro && serieTarjeta && serieSeguro === serieTarjeta);
-
-
-  //aqui valido las vigencias
   const fechaSeg = parseFecha(segExt.vigencia_fin);
   const segVigente = fechaSeg ? fechaSeg >= hoy : (segExt.vigente === true);
 
   const fechaLic = parseFecha(licExt.vigencia_fin);
   const licVigente = fechaLic ? fechaLic >= hoy : (licExt.vigente === true);
 
-  row.validacion_series_coinciden = seriesCoinciden;
   row.validacion_seguro_vigente   = segVigente;
   row.validacion_licencia_vigente = licVigente;
-  row.validacion_ok = seriesCoinciden && segVigente && licVigente;
+  row.validacion_ok = segVigente && licVigente;
 
   const valEl = document.getElementById(`val-${rowId}`);
   if (!valEl) return;
 
-  if (!row.seguro || !row.licencia || !row.tarjeta_circulacion) {
+  if (!row.seguro || !row.licencia) {
     valEl.textContent = '⏳ Falta doc.';
     valEl.style.color = 'var(--text-muted)';
     return;
   }
 
   const lineas = [
-    seriesCoinciden ? '✅ Series OK'        : `❌ Series no coinciden (Seg: ${serieSeguro||'—'} / Tar: ${serieTarjeta||'—'})`,
-    segVigente      ? '✅ Seguro vigente'   : `❌ Seguro vencido (${segExt.vigencia_fin||'—'})`,
-    licVigente      ? '✅ Licencia vigente' : `❌ Licencia vencida (${licExt.vigencia_fin||'—'})`
+    segVigente ? '✅ Seguro vigente'   : `❌ Seguro vencido (${segExt.vigencia_fin||'—'})`,
+    licVigente ? '✅ Licencia vigente' : `❌ Licencia vencida (${licExt.vigencia_fin||'—'})`
   ];
   valEl.innerHTML = lineas.join('<br>');
   valEl.style.color = row.validacion_ok ? 'var(--success)' : '#ef4444';
@@ -1647,16 +1590,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const btnHtml = _pvSubmitLabel(isPaseVisitaActive());
       for (const v of (seccionesAgregadas.vehiculo || [])) {
         const placa = v.placas || v.marca || 'vehículo';
-        if (!v.seguro || !v.licencia || !v.tarjeta_circulacion) {
-          alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: debe adjuntar seguro, licencia y tarjeta de circulación.`;
+        if (!v.seguro || !v.licencia) {
+          alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: debe adjuntar seguro y licencia.`;
           alertEl.style.display = 'block';
           btn.disabled = false; btn.innerHTML = btnHtml; return;
         }
         if (!v.validacion_ok) {
-          const ser = v.validacion_series_coinciden === false ? ' · Series no coinciden' : '';
-          const seg = v.validacion_seguro_vigente   === false ? ' · Seguro vencido'      : '';
-          const lic = v.validacion_licencia_vigente === false ? ' · Licencia vencida'    : '';
-          alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: documentos no válidos${ser}${seg}${lic}.`;
+          const seg = v.validacion_seguro_vigente   === false ? ' · Seguro vencido'  : '';
+          const lic = v.validacion_licencia_vigente === false ? ' · Licencia vencida' : '';
+          alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: documentos no válidos${seg}${lic}.`;
           alertEl.style.display = 'block';
           btn.disabled = false; btn.innerHTML = btnHtml; return;
         }
