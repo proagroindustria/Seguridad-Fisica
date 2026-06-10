@@ -2066,7 +2066,7 @@ lotes.forEach(lote => {
         </div>
         <table class="detalle-table">
           <thead><tr>
-             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SEGURO</th><th>TARJETA CIRC.</th><th>LICENCIA</th>
+             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
           </tr></thead>
           <tbody>${vehiculos.map((v,i) => `<tr>
             <td style="color:var(--text-3);font-family:'Share Tech Mono',monospace">${i+1}</td>
