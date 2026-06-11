@@ -2066,16 +2066,17 @@ lotes.forEach(lote => {
         </div>
         <table class="detalle-table">
           <thead><tr>
-             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
+             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SERIE</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
           </tr></thead>
           <tbody>${vehiculos.map((v,i) => `<tr>
             <td style="color:var(--text-3);font-family:'Share Tech Mono',monospace">${i+1}</td>
             <td style="color:var(--text);font-weight:500">${escapeHtml(v.marca||'—')}</td>
             <td>${escapeHtml(v.modelo||'—')}</td>
             <td style="font-family:'Share Tech Mono',monospace;color:var(--accent)">${escapeHtml(v.placas||'—')}</td>
+            <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2)">${escapeHtml(v.seguro_serie||'—')}</td>
             <td>${v.seguro && (v.seguro.startsWith('/9j') || v.seguro.startsWith('iVB') || v.seguro.startsWith('data:')) ?
-              `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`
-              : (v.seguro ? '✅' : '—')}</td>
+              `<div style="display:flex;flex-direction:column;align-items:center;gap:3px"><img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro"><span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-3)">${escapeHtml(v.seguro_serie||'')}</span></div>`
+              : (v.seguro ? `<span style="font-family:'Share Tech Mono',monospace;font-size:10px">${escapeHtml(v.seguro_serie||'✅')}</span>` : '—')}</td>
             
             <td>${v.tarjeta && (v.tarjeta.startsWith('/9j') || v.tarjeta.startsWith('iVB') || v.tarjeta.startsWith('data:')) ?
               `<img src="${v.tarjeta.startsWith('data:') ? v.tarjeta : 'data:image/jpeg;base64,' + v.tarjeta}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver tarjeta de circulación">`
