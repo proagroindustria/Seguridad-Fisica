@@ -3281,27 +3281,24 @@ function exportarAccesosExcel() {
 }
 
 function verImgDoc(src, serie) {
-  console.log('[verImgDoc] src:', src ? src.substring(0,30)+'...' : null, '| serie:', serie, '| tipo:', typeof serie);
   const prev = document.getElementById('imgDocOverlay');
   if (prev) prev.remove();
   const overlay = document.createElement('div');
   overlay.id = 'imgDocOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
   const btn = document.createElement('button');
   btn.textContent = '✕';
-  btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:99999;display:flex;align-items:center;justify-content:center';
+  btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:100000';
   btn.onclick = () => overlay.remove();
+  const tag = document.createElement('div');
+  tag.textContent = serie ? 'SERIE: ' + serie : '';
+  tag.style.cssText = 'background:#f5a623;color:#000;font-size:18px;font-weight:700;padding:10px 30px;border-radius:6px;font-family:monospace;z-index:100000;display:' + (serie ? 'block' : 'none');
   const img = document.createElement('img');
   img.src = src;
-  img.style.cssText = 'max-width:90%;max-height:78vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
+  img.style.cssText = 'max-width:90%;max-height:75vh;object-fit:contain;border:2px solid #f5a623;cursor:zoom-out';
   img.onclick = () => overlay.remove();
   overlay.appendChild(btn);
-  if (serie) {
-    const tag = document.createElement('div');
-    tag.textContent = 'SERIE: ' + serie;
-    tag.style.cssText = 'font-family:"Share Tech Mono",monospace;font-size:16px;font-weight:700;color:#000;background:#f5a623;padding:8px 28px;border-radius:4px;letter-spacing:0.1em;white-space:nowrap;flex-shrink:0';
-    overlay.appendChild(tag);
-  }
+  overlay.appendChild(tag);
   overlay.appendChild(img);
   document.body.appendChild(overlay);
   if (window._imgEscHandler) document.removeEventListener('keydown', window._imgEscHandler);
