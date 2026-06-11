@@ -2075,7 +2075,7 @@ lotes.forEach(lote => {
             <td style="font-family:'Share Tech Mono',monospace;color:var(--accent)">${escapeHtml(v.placas||'—')}</td>
             <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2)">${escapeHtml(v.seguro_serie||'—')}</td>
             <td>${v.seguro && (v.seguro.startsWith('/9j') || v.seguro.startsWith('iVB') || v.seguro.startsWith('data:')) ?
-              `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" onclick="verImgDoc(this.src,${JSON.stringify(v.seguro_serie||'')})" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`
+              `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" data-serie="${escapeHtml(v.seguro_serie||'')}" onclick="verImgDoc(this.src,this.dataset.serie)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`
               : (v.seguro ? '✅' : '—')}</td>
             
             <td>${v.tarjeta && (v.tarjeta.startsWith('/9j') || v.tarjeta.startsWith('iVB') || v.tarjeta.startsWith('data:')) ?
