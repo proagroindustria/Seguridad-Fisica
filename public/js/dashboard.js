@@ -2075,8 +2075,8 @@ lotes.forEach(lote => {
             <td style="font-family:'Share Tech Mono',monospace;color:var(--accent)">${escapeHtml(v.placas||'—')}</td>
             <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2)">${escapeHtml(v.seguro_serie||'—')}</td>
             <td>${v.seguro && (v.seguro.startsWith('/9j') || v.seguro.startsWith('iVB') || v.seguro.startsWith('data:')) ?
-              `<div style="display:flex;flex-direction:column;align-items:center;gap:3px"><img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro"><span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-3)">${escapeHtml(v.seguro_serie||'')}</span></div>`
-              : (v.seguro ? `<span style="font-family:'Share Tech Mono',monospace;font-size:10px">${escapeHtml(v.seguro_serie||'✅')}</span>` : '—')}</td>
+              `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" onclick="verImgDoc(this.src,${JSON.stringify(v.seguro_serie||'')})" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`
+              : (v.seguro ? '✅' : '—')}</td>
             
             <td>${v.tarjeta && (v.tarjeta.startsWith('/9j') || v.tarjeta.startsWith('iVB') || v.tarjeta.startsWith('data:')) ?
               `<img src="${v.tarjeta.startsWith('data:') ? v.tarjeta : 'data:image/jpeg;base64,' + v.tarjeta}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver tarjeta de circulación">`
@@ -3280,21 +3280,29 @@ function exportarAccesosExcel() {
   XLSX.writeFile(wb, 'PROAGRO_Accesos_Faciales_' + fecha + '.xlsx');
 }
 
-function verImgDoc(src) {
+function verImgDoc(src, serie) {
   const prev = document.getElementById('imgDocOverlay');
   if (prev) prev.remove();
   const overlay = document.createElement('div');
   overlay.id = 'imgDocOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
   const btn = document.createElement('button');
   btn.textContent = '✕';
   btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:99999;display:flex;align-items:center;justify-content:center';
   btn.onclick = () => overlay.remove();
   const img = document.createElement('img');
   img.src = src;
-  img.style.cssText = 'max-width:90%;max-height:90vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
+  img.style.cssText = 'max-width:90%;max-height:85vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
   img.onclick = () => overlay.remove();
-  overlay.appendChild(btn); overlay.appendChild(img); document.body.appendChild(overlay);
+  overlay.appendChild(btn);
+  overlay.appendChild(img);
+  if (serie) {
+    const tag = document.createElement('div');
+    tag.textContent = 'SERIE: ' + serie;
+    tag.style.cssText = 'font-family:"Share Tech Mono",monospace;font-size:15px;color:#f5a623;letter-spacing:0.12em;background:rgba(0,0,0,0.6);padding:6px 18px;border:1px solid #f5a623;border-radius:4px';
+    overlay.appendChild(tag);
+  }
+  document.body.appendChild(overlay);
   if (window._imgEscHandler) document.removeEventListener('keydown', window._imgEscHandler);
   function escHandler(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } }
   window._imgEscHandler = escHandler;
