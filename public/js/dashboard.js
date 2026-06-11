@@ -3281,6 +3281,7 @@ function exportarAccesosExcel() {
 }
 
 function verImgDoc(src, serie) {
+  console.log('[verImgDoc] src:', src ? src.substring(0,30)+'...' : null, '| serie:', serie, '| tipo:', typeof serie);
   const prev = document.getElementById('imgDocOverlay');
   if (prev) prev.remove();
   const overlay = document.createElement('div');
@@ -3292,7 +3293,7 @@ function verImgDoc(src, serie) {
   btn.onclick = () => overlay.remove();
   const img = document.createElement('img');
   img.src = src;
-  img.style.cssText = 'max-width:90%;max-height:85vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
+  img.style.cssText = 'max-width:90%;max-height:78vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
   img.onclick = () => overlay.remove();
   overlay.appendChild(btn);
   overlay.appendChild(img);
