@@ -2072,7 +2072,7 @@ lotes.forEach(lote => {
             <td style="color:var(--text-3);font-family:'Share Tech Mono',monospace">${i+1}</td>
             <td style="color:var(--text);font-weight:500">${escapeHtml(v.marca||'—')}</td>
             <td>${escapeHtml(v.modelo||'—')}</td>
-            <td style="font-family:'Share Tech Mono',monospace;color:var(--accent)">${escapeHtml(v.placas||'—')}</td>
+            <td>${escapeHtml(v.placas||'—')}</td>
             <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2)">${escapeHtml(v.seguro_serie||'—')}</td>
             <td>${v.seguro && (v.seguro.startsWith('/9j') || v.seguro.startsWith('iVB') || v.seguro.startsWith('data:')) ?
               `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" data-serie="${escapeHtml(v.seguro_serie||'')}" onclick="verImgDoc(this.src,this.dataset.serie)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`
