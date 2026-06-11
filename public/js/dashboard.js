@@ -3300,7 +3300,7 @@ function verImgDoc(src, serie) {
   if (serie) {
     const tag = document.createElement('div');
     tag.textContent = 'SERIE: ' + serie;
-    tag.style.cssText = 'font-family:"Share Tech Mono",monospace;font-size:15px;color:#f5a623;letter-spacing:0.12em;background:rgba(0,0,0,0.6);padding:6px 18px;border:1px solid #f5a623;border-radius:4px';
+    tag.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);font-family:"Share Tech Mono",monospace;font-size:15px;color:#f5a623;letter-spacing:0.12em;background:rgba(0,0,0,0.85);padding:8px 24px;border:1px solid #f5a623;border-radius:4px;z-index:100000;white-space:nowrap';
     overlay.appendChild(tag);
   }
   document.body.appendChild(overlay);
