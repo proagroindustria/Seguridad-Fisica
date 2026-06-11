@@ -3291,7 +3291,7 @@ function verImgDoc(src, serie) {
   btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:100000';
   btn.onclick = () => overlay.remove();
   const tag = document.createElement('div');
-  tag.textContent = serie ? 'SERIE: ' + serie : '';
+  tag.textContent = serie ? 'Num. Serie. Identificado en Poliza de Seguro:: ' + serie : '';
   tag.style.cssText = 'background:#f5a623;color:#000;font-size:18px;font-weight:700;padding:10px 30px;border-radius:6px;font-family:monospace;z-index:100000;display:' + (serie ? 'block' : 'none');
   const img = document.createElement('img');
   img.src = src;
