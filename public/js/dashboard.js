@@ -2079,7 +2079,7 @@ lotes.forEach(lote => {
               : (v.seguro ? '✅' : '—')}</td>
             
             <td>${v.tarjeta && (v.tarjeta.startsWith('/9j') || v.tarjeta.startsWith('iVB') || v.tarjeta.startsWith('data:')) ?
-              `<img src="${v.tarjeta.startsWith('data:') ? v.tarjeta : 'data:image/jpeg;base64,' + v.tarjeta}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver tarjeta de circulación">`
+              `<img src="${v.tarjeta.startsWith('data:') ? v.tarjeta : 'data:image/jpeg;base64,' + v.tarjeta}" data-serie="${escapeHtml(v.seguro_serie||'')}" onclick="verImgDoc(this.src,this.dataset.serie)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver tarjeta de circulación">`
               : (v.tarjeta ? '✅' : '—')}</td>
             <td>${v.licencia && (v.licencia.startsWith('/9j') || v.licencia.startsWith('iVB') || v.licencia.startsWith('data:')) ?
               `<img src="${v.licencia.startsWith('data:') ? v.licencia : 'data:image/jpeg;base64,' + v.licencia}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver licencia">`
