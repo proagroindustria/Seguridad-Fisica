@@ -3296,13 +3296,13 @@ function verImgDoc(src, serie) {
   img.style.cssText = 'max-width:90%;max-height:78vh;object-fit:contain;border:2px solid #f5a623;display:block;cursor:zoom-out';
   img.onclick = () => overlay.remove();
   overlay.appendChild(btn);
-  overlay.appendChild(img);
   if (serie) {
     const tag = document.createElement('div');
     tag.textContent = 'SERIE: ' + serie;
-    tag.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);font-family:"Share Tech Mono",monospace;font-size:15px;color:#f5a623;letter-spacing:0.12em;background:rgba(0,0,0,0.85);padding:8px 24px;border:1px solid #f5a623;border-radius:4px;z-index:100000;white-space:nowrap';
+    tag.style.cssText = 'font-family:"Share Tech Mono",monospace;font-size:16px;font-weight:700;color:#000;background:#f5a623;padding:8px 28px;border-radius:4px;letter-spacing:0.1em;white-space:nowrap;flex-shrink:0';
     overlay.appendChild(tag);
   }
+  overlay.appendChild(img);
   document.body.appendChild(overlay);
   if (window._imgEscHandler) document.removeEventListener('keydown', window._imgEscHandler);
   function escHandler(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escHandler); } }
