@@ -3295,8 +3295,7 @@ function verImgDoc(src, serie) {
   tag.style.cssText = 'background:#f5a623;color:#000;font-size:18px;font-weight:700;padding:10px 30px;border-radius:6px;font-family:monospace;z-index:100000;display:' + (serie ? 'block' : 'none');
   const img = document.createElement('img');
   img.src = src;
-  img.style.cssText = 'max-width:90%;max-height:75vh;object-fit:contain;border:2px solid #f5a623;cursor:zoom-out';
-  img.onclick = () => overlay.remove();
+  img.style.cssText = 'max-width:90%;max-height:75vh;object-fit:contain;border:2px solid #f5a623';
   overlay.appendChild(btn);
   overlay.appendChild(tag);
   overlay.appendChild(img);
