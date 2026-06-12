@@ -356,7 +356,7 @@ function _compararNombres(extraido, tipado) {
 
 
 // ── Validar documento subido en sección personal (INE / PASAPORTE / LICENCIA) ──
-async function validarDocumentoPersonal(tipo, rowId, base64, mime) {
+async function validarDocumentoPersonal(tipo, rowId, docToken) {
   const valCell = document.getElementById(`val-personal-${rowId}`);
   const msgEl   = document.getElementById(`doc-msg-${rowId}`);
 
@@ -380,8 +380,12 @@ async function validarDocumentoPersonal(tipo, rowId, base64, mime) {
     const resp = await fetch('/documentos/procesar-doc', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64, mime, docType: 'AUTO' })
+      body: JSON.stringify({ token: docToken, docType: 'AUTO' })
     });
+    if (!resp.ok) {
+      setEstado(false, `❌ Error del servidor al validar (HTTP ${resp.status}) — intenta de nuevo`, 'var(--danger)');
+      return;
+    }
     const data = await resp.json();
 
     if (!data.success) {
@@ -1356,9 +1360,26 @@ async function onFileChange(tipo, rowId, fieldId, input) {
       mimeFinal = 'image/jpeg';
     }
 
+    // ── Subir UNA sola vez al servidor; de aquí en adelante circula solo el token ──
+    if (label) label.textContent = '⬆ Subiendo...';
+    const stashResp = await fetch('/documentos/stash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64, mime: mimeFinal, nombre: file.name })
+    });
+    if (!stashResp.ok) {
+      const tamMB = (base64.length / 1024 / 1024).toFixed(1);
+      throw new Error(stashResp.status === 413
+        ? `la imagen pesa demasiado para el servidor (${tamMB} MB, HTTP 413 — límite nginx)`
+        : `el servidor rechazó la subida (HTTP ${stashResp.status})`);
+    }
+    const stash = await stashResp.json();
+    if (!stash.success) throw new Error(stash.error || 'no se pudo subir el archivo');
+    const docToken = stash.token;
+
     const rows = seccionesAgregadas[tipo] || [];
     const row  = rows.find(r => r._id === rowId);
-    if (row) { row[fieldId] = base64; row[`${fieldId}_mime`] = mimeFinal; row[`${fieldId}_nombre`] = file.name; }
+    if (row) { row[fieldId] = docToken; row[`${fieldId}_mime`] = mimeFinal; row[`${fieldId}_nombre`] = file.name; }
 
     // ── Determinar endpoint ──
     let webhookUrl = null;
@@ -1372,17 +1393,17 @@ async function onFileChange(tipo, rowId, fieldId, input) {
       if (label) label.textContent = file.name.length > 22 ? file.name.slice(0, 20) + '…' : file.name;
       const clearBtn = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
       if (clearBtn) clearBtn.style.display = 'inline-block';
-      await validarDocumentoPersonal(tipo, rowId, base64, mimeFinal);
+      await validarDocumentoPersonal(tipo, rowId, docToken);
       updateRowCount(tipo);
       return;
     }
 
     if (webhookUrl) {
       try {
-        const resp = await fetch(webhookUrl, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ base64File: base64, mimeType: mimeFinal, requestId: `${rowId}-${fieldId}-${Date.now()}` }) 
+        const resp = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: docToken, requestId: `${rowId}-${fieldId}-${Date.now()}` })
         });
         const data = await resp.json();
         if (row) row[`${fieldId}_extracted`] = data;

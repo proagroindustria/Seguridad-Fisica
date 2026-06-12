@@ -37,9 +37,12 @@ async function comprimirBase64(base64, mime) {
 
   try {
     const buffer = Buffer.from(base64, 'base64');
-    const MAX    = 1000 * 1024; // 1.0 MB — seguro bajo límite nginx
-    let quality  = 88;
-    const maxDim = 1800; // mayor resolución para que GPT-4o lea texto correctamente
+    // 2.5 MB: con el flujo de tokens el guardado ya no re-envía las imágenes,
+    // así que podemos priorizar legibilidad para GPT-4o.
+    // Requiere client_max_body_size >= 25m en nginx (incluido el server block de n8n si pasa por él).
+    const MAX    = 2500 * 1024;
+    let quality  = 90;
+    const maxDim = 2000; // mayor resolución para que GPT-4o lea texto correctamente
 
     // 4:4:4 preserva mucho mejor el texto que 4:2:0
     let result = await sharp(buffer)
@@ -47,8 +50,8 @@ async function comprimirBase64(base64, mime) {
       .jpeg({ quality, chromaSubsampling: '4:4:4' })
       .toBuffer();
 
-    // Reducir calidad de a 5 pero nunca bajar de 65 (por debajo el texto se distorsiona)
-    while (result.length > MAX && quality > 65) {
+    // Reducir calidad de a 5 pero nunca bajar de 80 (por debajo el texto se distorsiona y GPT-4o alucina)
+    while (result.length > MAX && quality > 80) {
       quality -= 5;
       result = await sharp(buffer)
         .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
@@ -59,8 +62,8 @@ async function comprimirBase64(base64, mime) {
     // Último recurso: reducir dimensión pero mantener calidad legible
     if (result.length > MAX) {
       result = await sharp(buffer)
-        .resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 70, chromaSubsampling: '4:4:4' })
+        .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80, chromaSubsampling: '4:4:4' })
         .toBuffer();
     }
 
@@ -112,6 +115,14 @@ async function initTables() {
       status     VARCHAR(20),
       detalle    TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS documentos_temp (
+      token      VARCHAR(70) PRIMARY KEY,
+      base64     TEXT NOT NULL,
+      mime       VARCHAR(50),
+      nombre     VARCHAR(300),
+      usuario_id INTEGER,
+      creado_en  TIMESTAMPTZ DEFAULT NOW()
     );
   `);
 }
@@ -631,9 +642,44 @@ router.put('/:id/validar', requireAuth, requireSeguridad, async (req, res) => {
   }
 });
 
+// ─── Tokens temporales: el archivo viaja UNA vez (al stash) y después
+// solo circula su token, tanto para validar con IA como para guardar la solicitud.
+const crypto = require('crypto');
+
+async function resolverToken(token) {
+  const r = await poolDoc.query('SELECT base64, mime, nombre FROM documentos_temp WHERE token=$1', [token]);
+  return r.rows[0] || null;
+}
+
+// ─── POST /documentos/stash ── Recibe el archivo comprimido del cliente y devuelve un token
+router.post('/stash', requireAuth, async (req, res) => {
+  const { base64, mime, nombre } = req.body;
+  if (!base64) return res.status(400).json({ success: false, error: 'Archivo requerido' });
+  try {
+    const token = 'tmp:' + crypto.randomBytes(24).toString('hex');
+    await poolDoc.query(
+      `INSERT INTO documentos_temp (token, base64, mime, nombre, usuario_id) VALUES ($1,$2,$3,$4,$5)`,
+      [token, base64, mime || 'image/jpeg', nombre || null, req.session.user.id || null]
+    );
+    // Limpieza oportunista de archivos abandonados (modal cerrado sin guardar)
+    poolDoc.query(`DELETE FROM documentos_temp WHERE creado_en < NOW() - INTERVAL '3 hours'`).catch(() => {});
+    console.log(`[STASH] token=${token.slice(0, 14)}… | ${nombre || 'sin nombre'} | ${Math.round(base64.length * 3/4 / 1024)} KB`);
+    res.json({ success: true, token });
+  } catch (e) {
+    console.error('[STASH] Error:', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ─── POST /documentos/procesar-doc ── Procesa credencial con IA sin guardar
+// Acepta { token } (flujo nuevo) o { base64, mime } (flujo viejo, ej. enrolamiento)
 router.post('/procesar-doc', requireAuth, async (req, res) => {
-  const { base64, mime, nombre, docType } = req.body;
+  let { base64, mime, nombre, docType, token } = req.body;
+  if (token) {
+    const doc = await resolverToken(token).catch(() => null);
+    if (!doc) return res.json({ success: false, error: 'El documento expiró en el servidor — vuelve a adjuntarlo' });
+    base64 = doc.base64; mime = doc.mime; nombre = nombre || doc.nombre;
+  }
   if (!base64) return res.status(400).json({ success: false, error: 'Archivo requerido' });
 
   // 'AUTO' significa "detecta tú n8n" — pero n8n no tiene esa rama.

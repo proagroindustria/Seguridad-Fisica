@@ -486,6 +486,31 @@ router.post('/', requireAuth, async (req, res) => {
     const ip_creacion = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
     const usuario_creacion = user.username || null;
 
+    // ── Resolver tokens de documentos (tmp:...) → base64 desde documentos_temp ──
+    // Los archivos ya viajaron una vez al validarse; aquí solo llegan referencias.
+    const camposDoc = { personal: ['documento_ine', 'documento'], vehiculo: ['seguro', 'licencia', 'tarjeta_circulacion', 'tarjeta'] };
+    const tokensUsados = [];
+    const filasConToken = [];
+    for (const [tipo, campos] of Object.entries(camposDoc)) {
+      for (const fila of (secciones?.[tipo] || [])) {
+        for (const campo of campos) {
+          if (typeof fila[campo] === 'string' && fila[campo].startsWith('tmp:')) {
+            tokensUsados.push(fila[campo]);
+            filasConToken.push({ fila, campo });
+          }
+        }
+      }
+    }
+    if (tokensUsados.length) {
+      const rT = await poolFacial.query('SELECT token, base64 FROM documentos_temp WHERE token = ANY($1)', [tokensUsados]);
+      const porToken = Object.fromEntries(rT.rows.map(x => [x.token, x.base64]));
+      const faltantes = tokensUsados.filter(t => !porToken[t]);
+      if (faltantes.length) {
+        return res.status(400).json({ success: false, error: `${faltantes.length} documento(s) expiraron en el servidor — vuelve a adjuntarlos e intenta de nuevo.` });
+      }
+      for (const { fila, campo } of filasConToken) fila[campo] = porToken[fila[campo]];
+    }
+
     const r1 = await pool.query(
       `INSERT INTO permisos (folio, empresa, contrato, responsable_contrato, responsable1, responsable2, responsable1_tel, responsable2_tel, motivo_visita, fecha_inicio, fecha_fin, estado, creado_por, fecha_envio, firma_creacion_ip, firma_creacion_ip_privada, firma_creacion_ubicacion, firma_creacion_fecha, firma_creacion_usuario, es_pase_visita)
  VALUES ('TEMP',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'en_espera_area',$11,NOW(),$12,$13,$14,NOW(),$15,$16) RETURNING id`,
@@ -525,6 +550,11 @@ router.post('/', requireAuth, async (req, res) => {
 await pool.query(`INSERT INTO permiso_vehiculos (permiso_id, marca, modelo, placas, seguro, licencia, tarjeta, seguro_poliza, seguro_aseguradora, seguro_vigencia_inicio, seguro_vigencia_fin, seguro_vigente, seguro_serie, licencia_nombre, licencia_numero, licencia_tipo, licencia_vigencia_fin, licencia_vigente, tarjeta_serie, tarjeta_placas, tarjeta_vigencia_fin, tarjeta_vigente) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
 [pid, v.marca||null, v.modelo||null, v.placas||null, v.seguro||null, v.licencia||null, (v.tarjeta_circulacion||v.tarjeta)||null, segExt.numero_poliza||null, segExt.aseguradora||null, segExt.vigencia_inicio||null, segExt.vigencia_fin||null, segExt.vigente??null, segExt.serie_vehiculo||null, licExt.nombre_conductor||null, licExt.numero_licencia||null, licExt.tipo_licencia||null, licExt.vigencia_fin||null, licExt.vigente??null, tarExt.numero_serie||null, tarExt.placas||null, tarExt.vigencia_fin||null, tarExt.vigente??null]); } }
     if (sec.equipo&&Array.isArray(sec.equipo)) { for (const e of sec.equipo) { if (!e.descripcion&&!e.cantidad) continue; await pool.query(`INSERT INTO permiso_equipos (permiso_id, cantidad, descripcion, marca, modelo, serie, observaciones) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [pid, parseInt(e.cantidad)||1, e.descripcion||null, e.marca||null, e.modelo||null, e.serie||null, e.observaciones||null]); } }
+    // Los documentos ya quedaron guardados en el permiso: liberar el stash temporal
+    if (tokensUsados.length) {
+      poolFacial.query('DELETE FROM documentos_temp WHERE token = ANY($1)', [tokensUsados]).catch(() => {});
+    }
+
     const correosCreado = await obtenerCorreosPermiso(empresa.trim(), responsable_contrato);
     dispararWebhook(process.env.N8N_WEBHOOK_PERMISO_CREADO, { evento:'permiso_creado', folio, empresa: empresa.trim(), contrato: contrato.trim(), responsable_contrato: responsable_contrato||'', fecha_inicio, fecha_fin, creado_por: user.nombre_completo||user.username, url_sistema:'https://seguridadfisica.proagroindustria.com/dashboard', ...correosCreado });
     return res.json({ success: true, data: solicitud });

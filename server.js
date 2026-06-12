@@ -98,11 +98,21 @@ async function proxyN8N(url, body) {
 }
 
 
+// Si el cliente manda { token } en vez de base64File, recuperar el archivo
+// del stash temporal (documentos_temp en reconocimiento_db)
+async function resolverBodyN8N(body) {
+  if (!body.token) return body;
+  const r = await poolFacialServer.query('SELECT base64, mime FROM documentos_temp WHERE token=$1', [body.token]);
+  if (!r.rows.length) throw new Error('El documento expiró en el servidor — vuelve a adjuntarlo');
+  const { token, ...resto } = body;
+  return { ...resto, base64File: r.rows[0].base64, mimeType: r.rows[0].mime || 'image/jpeg' };
+}
+
 app.post('/api/procesar-seguro', async (req, res) => {
   try {
     const url = process.env.N8N_SEGURO_URL;
     if (!url) return res.json({ ok: false, error: 'N8N_SEGURO_URL no configurado' });
-    res.json(await proxyN8N(url, req.body));
+    res.json(await proxyN8N(url, await resolverBodyN8N(req.body)));
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -111,7 +121,7 @@ app.post('/api/procesar-licencia', async (req, res) => {
   try {
     const url = process.env.N8N_LICENCIA_URL;
     if (!url) return res.json({ ok: false, error: 'N8N_LICENCIA_URL no configurado' });
-    res.json(await proxyN8N(url, req.body));
+    res.json(await proxyN8N(url, await resolverBodyN8N(req.body)));
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -120,7 +130,7 @@ app.post('/api/procesar-tarjeta', async (req, res) => {
   try {
     const url = process.env.N8N_TARJETA_URL;
     if (!url) return res.json({ ok: false, error: 'N8N_TARJETA_URL no configurado' });
-    const data = await proxyN8N(url, req.body);
+    const data = await proxyN8N(url, await resolverBodyN8N(req.body));
     res.json(data);
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
