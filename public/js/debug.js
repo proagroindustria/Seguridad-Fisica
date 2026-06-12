@@ -96,6 +96,34 @@
 
   registrar('info', 'Panel de depuración activo. URL: ' + location.href);
 
+  // Consultar capacidades del servidor al arrancar
+  _fetch('/api/debug-config').then(function (r) {
+    return r.ok ? r.json() : null;
+  }).then(function (cfg) {
+    if (!cfg) return;
+    registrar('info',
+      '🖥 SERVIDOR: Express acepta hasta ' + cfg.express_body_limit +
+      ' | nginx max_body: ' + cfg.nginx_max_body +
+      ' | Node ' + cfg.node_version +
+      ' | uptime: ' + cfg.uptime_min + ' min' +
+      ' | iniciado: ' + cfg.iniciado_en
+    );
+  }).catch(function () {});  // silencioso si aún no hay sesión
+
+  // Interceptar selección de archivos para mostrar tamaño real antes de comprimir
+  document.addEventListener('change', function (ev) {
+    var el = ev.target;
+    if (el.tagName !== 'INPUT' || el.type !== 'file') return;
+    var files = el.files;
+    if (!files || !files.length) return;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var mb = (f.size / 1024 / 1024).toFixed(2);
+      var nivel = f.size > 8 * 1024 * 1024 ? 'warn' : 'info';
+      registrar(nivel, '📎 Archivo seleccionado: "' + f.name + '" | tamaño original: ' + mb + ' MB | tipo: ' + (f.type || 'desconocido'));
+    }
+  }, true);
+
   // ── UI del panel ──
   function crearUI() {
     // Botón flotante

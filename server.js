@@ -37,6 +37,21 @@ app.get('/retiros', (req, res) => {
   res.render('retiros', { user: req.session.user });
 });
 
+// ── Endpoint de diagnóstico (solo usuarios autenticados) ──────────────────────
+app.get('/api/debug-config', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'No autenticado' });
+  res.json({
+    express_body_limit: '50 MB',
+    nginx_max_body: process.env.NGINX_MAX_BODY || '(no configurado en .env — revisa nginx.conf)',
+    node_version: process.version,
+    entorno: process.env.NODE_ENV || 'development',
+    puerto: process.env.PORT || 3010,
+    iniciado_en: new Date(_startTime).toLocaleString('es-MX'),
+    uptime_min: Math.floor((Date.now() - _startTime) / 60000),
+  });
+});
+const _startTime = Date.now();
+
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/solicitudes', solicitudesRoutes);
