@@ -1341,7 +1341,7 @@ async function onFileChange(tipo, rowId, fieldId, input) {
   try {
     let base64, mimeFinal = file.type;
 
-    if (file.type === 'application/pdf') {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const page = await pdf.getPage(1);
@@ -1350,9 +1350,10 @@ async function onFileChange(tipo, rowId, fieldId, input) {
       canvas.width = viewport.width; canvas.height = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-      mimeFinal = 'image/jpeg';    
+      mimeFinal = 'image/jpeg';
     } else {
       base64 = await comprimirImagenVehiculo(file);
+      mimeFinal = 'image/jpeg';
     }
 
     const rows = seccionesAgregadas[tipo] || [];
@@ -1437,10 +1438,12 @@ async function onFileChange(tipo, rowId, fieldId, input) {
 
 
 async function comprimirImagenVehiculo(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
     reader.onload = (e) => {
       const img = new Image();
+      img.onerror = () => reject(new Error('Formato de imagen no compatible (probablemente HEIC de iPhone). Activa Ajustes → Cámara → Formatos → "Más compatible", o sube la foto como JPG/PNG'));
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let w = img.width, h = img.height;
@@ -2857,7 +2860,7 @@ async function procesarDocEnrol(file, tipo) {
   try {
     let base64; let mimeFinal = file.type;
 
-    if (file.type === 'application/pdf') {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
       procesoEl.innerHTML = '⏳ Convirtiendo PDF a imagen...';
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -2869,7 +2872,8 @@ async function procesarDocEnrol(file, tipo) {
       base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       mimeFinal = 'image/jpeg';
     } else {
-      base64 = await fileToBase64(file);
+      base64 = await comprimirImagenVehiculo(file);
+      mimeFinal = 'image/jpeg';
     }
 
     procesoEl.innerHTML = '⏳ Enviando a procesamiento con IA...';
@@ -3291,7 +3295,8 @@ function verImgDoc(src, serie) {
   btn.style.cssText = 'position:fixed;top:20px;right:20px;width:36px;height:36px;background:#f5a623;color:#000;border:none;border-radius:50%;font-size:18px;font-weight:700;cursor:pointer;z-index:100000';
   btn.onclick = () => overlay.remove();
   const tag = document.createElement('div');
-  tag.textContent = serie ? 'Num. Serie. Identificado en Poliza de Seguro:: ' + serie : '';
+  //tag.textContent = serie ? 'Num. Serie. Identificado en Poliza de Seguro:: ' + serie : '';
+  tag.textContent = serie ? 'SERIE: ' + serie : '';
   tag.style.cssText = 'background:#f5a623;color:#000;font-size:18px;font-weight:700;padding:10px 30px;border-radius:6px;font-family:monospace;z-index:100000;display:' + (serie ? 'block' : 'none');
   const img = document.createElement('img');
   img.src = src;

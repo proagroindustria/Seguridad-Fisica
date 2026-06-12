@@ -28,6 +28,13 @@ async function comprimirBase64(base64, mime) {
     if (sizeKB > 1100) console.warn(`[COMPRESS] PDF grande: ${sizeKB} KB — puede ser rechazado por nginx`);
     return { base64, mime };
   }
+
+  // HEIC/HEIF (fotos de iPhone): sharp no lo decodifica y GPT-4o lo rechaza
+  const header = Buffer.from(base64.slice(0, 32), 'base64').toString('latin1');
+  if (/ftyp(heic|heix|hevc|heif|mif1|msf1)/i.test(header) || /heic|heif/i.test(mime || '')) {
+    throw new Error('Imagen en formato HEIC (iPhone) no soportada. Activa Ajustes → Cámara → Formatos → "Más compatible", o sube la foto como JPG/PNG.');
+  }
+
   try {
     const buffer = Buffer.from(base64, 'base64');
     const MAX    = 1000 * 1024; // 1.0 MB — seguro bajo límite nginx
