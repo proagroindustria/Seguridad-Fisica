@@ -1200,9 +1200,9 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
   .modal-form { padding: 14px 16px; }
   .modal-title { font-size: 20px; }
 
-  /* Footer pegado al fondo, nunca se corta */
+  /* Footer pegado al fondo, nunca se corta. Acción principal arriba */
   .modal-footer {
-    flex-direction: column;
+    flex-direction: column-reverse;
     flex-shrink: 0;
     padding: 14px 16px 22px;
     gap: 10px;
