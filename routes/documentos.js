@@ -636,7 +636,10 @@ router.post('/procesar-doc', requireAuth, async (req, res) => {
   const { base64, mime, nombre, docType } = req.body;
   if (!base64) return res.status(400).json({ success: false, error: 'Archivo requerido' });
 
-  const tipoDoc = docType || 'INE';
+  // 'AUTO' significa "detecta tú n8n" — pero n8n no tiene esa rama.
+  // Enviamos 'INE' como catch-all; n8n con docType='INE' igual detecta y devuelve
+  // campos de LICENCIA/PASAPORTE cuando el contenido lo indica.
+  const tipoDoc = (docType && docType !== 'AUTO') ? docType : 'INE';
   console.log(`[PROCESAR-DOC] docType="${tipoDoc}" | mime="${mime}" | size=${Math.round(base64.length * 3/4 / 1024)} KB`);
 
   try {

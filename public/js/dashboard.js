@@ -1627,13 +1627,31 @@ document.addEventListener('DOMContentLoaded', () => {
         es_pase_visita: isPaseVisitaActive()
       };
 
+      const cuerpo = JSON.stringify(data);
+      const tamMB = (cuerpo.length / 1024 / 1024).toFixed(2);
       try {
-        const res = await fetch('/solicitudes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch('/solicitudes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: cuerpo });
+
+        if (!res.ok) {
+          // nginx/node rechazó: el cuerpo puede ser HTML, no JSON
+          const texto = await res.text();
+          let result = null;
+          try { result = JSON.parse(texto); } catch(e) {}
+          let msg = result?.error || `Error del servidor — HTTP ${res.status}`;
+          if (res.status === 413) msg = `❌ Los archivos adjuntos pesan demasiado (enviaste ${tamMB} MB y el servidor lo rechazó con HTTP 413). Sube menos documentos a la vez o avisa al administrador para subir el límite de nginx.`;
+          if (res.status === 502) msg = `❌ El servidor web no pudo comunicarse con la aplicación (HTTP 502). Verifica que node server.js esté corriendo.`;
+          if (res.status === 504) msg = `❌ El servidor tardó demasiado en responder (HTTP 504, enviaste ${tamMB} MB). Reintenta; si persiste, hay que subir el timeout de nginx.`;
+          alertEl.textContent = msg;
+          alertEl.style.display = 'block';
+          return;
+        }
+
         const result = await res.json();
         if (!result.success) { alertEl.textContent = result.error || 'Error.'; alertEl.style.display = 'block'; }
         else { closeModal(); cargarSolicitudes(); }
       } catch(err) {
-        alertEl.textContent = 'Error de conexión.'; alertEl.style.display = 'block';
+        alertEl.textContent = `❌ Error de red: no llegó respuesta del servidor (${err.message}). Enviabas ${tamMB} MB — si supera el límite de nginx (client_max_body_size) la conexión se corta a la mitad y aparece este error. También puede ser señal débil o que se perdió la sesión.`;
+        alertEl.style.display = 'block';
       } finally {
         btn.disabled = false;
         btn.innerHTML = _pvSubmitLabel(isPaseVisitaActive());
