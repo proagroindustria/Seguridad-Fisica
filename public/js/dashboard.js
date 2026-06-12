@@ -2044,6 +2044,7 @@ lotes.forEach(lote => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
           Personal (${personal.length} registros)
         </div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="detalle-table">
           <thead><tr>
             <th>#</th><th>NO. CREDENCIAL</th><th>NOMBRE</th><th>CATEGORÍA</th><th>CREDENCIAL</th>
@@ -2058,6 +2059,7 @@ lotes.forEach(lote => {
             <td>${pers.cred_base64 ? `<img src="data:${pers.cred_mime};base64,${pers.cred_base64}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver credencial">` : '—'}</td>
           </tr>`).join('')}</tbody>
         </table>
+        </div>
       </div>` : ''}
 
       <!-- VEHÍCULOS — solo vista, sin checkboxes ni estado salida -->
@@ -2067,6 +2069,7 @@ lotes.forEach(lote => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
           Vehículos (${vehiculos.length} registros)
         </div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="detalle-table">
           <thead><tr>
              <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SERIE</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
@@ -2091,6 +2094,7 @@ lotes.forEach(lote => {
 
           </tr>`).join('')}</tbody>
         </table>
+        </div>
       </div>` : ''}
 
       <!-- EQUIPOS — con checkboxes y cantidad a sacar solo para contratista -->
@@ -2101,6 +2105,7 @@ lotes.forEach(lote => {
           Equipo / Herramientas (${equipos.length} registros)
           ${puedeRegistrar ? '<span class="sec-hint">— indica cantidad a sacar</span>' : ''}
         </div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="detalle-table">
           <thead><tr>
             ${puedeRegistrar ? '<th style="width:40px"></th>' : ''}
@@ -2127,6 +2132,7 @@ lotes.forEach(lote => {
             </tr>`;
           }).join('')}</tbody>
         </table>
+        </div>
       </div>` : ''}
 
       <!-- BOTÓN REGISTRAR LOTE (solo contratista en activo, solo si hay equipos) -->
