@@ -524,11 +524,11 @@
         for (let parte of s.split(',')) {
           if (parte.startsWith('[')) parte = parte.slice(1); // quitar " inicial de la clave
 
-          const sep = parte.indexOf('[Ñ'); // separador clave:valor (era :")
+          const sep = parte.search(/\[[Ññ]/); // separador clave:valor (era :"), Ñ/ñ según Bloq Mayús
           if (sep === -1) continue;
 
           const clave = parte.slice(0, sep).replace(/\?/g, '_'); // ? era _
-          let val     = parte.slice(sep + 2); // después del [Ñ
+          let val     = parte.slice(sep + 2); // después del [Ñ o [ñ
 
           if (val.startsWith('[')) {
             // Valor string
