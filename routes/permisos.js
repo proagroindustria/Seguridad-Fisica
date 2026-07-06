@@ -143,10 +143,10 @@ async function dispararWebhookN8N(pool, solicitud_id) {
 
 async function generarPDFCredenciales(pool, poolFacial, solicitudId) {
   const rSol = await pool.query(`SELECT * FROM permisos WHERE id = $1`, [solicitudId]);
-  if (!rSol.rows.length) return;
+  if (!rSol.rows.length) throw new Error(`Permiso ${solicitudId} no encontrado`);
   const sol = rSol.rows[0];
   const rPersonal = await pool.query(`SELECT pp.nombre, pp.num_credencial, pp.categoria, pp.trabajador_id FROM permiso_personal pp WHERE pp.permiso_id = $1`, [solicitudId]);
-  if (!rPersonal.rows.length) return;
+  if (!rPersonal.rows.length) throw new Error(`El permiso ${sol.folio || solicitudId} no tiene personal registrado — agrega trabajadores antes de descargar el pase`);
   const fechaInicio = sol.fecha_inicio ? new Date(sol.fecha_inicio).toLocaleDateString('es-MX') : '';
   const fechaFin    = sol.fecha_fin    ? new Date(sol.fecha_fin).toLocaleDateString('es-MX')    : '';
   const outputDir = path.join(__dirname, '..', 'public', 'credenciales');
@@ -753,6 +753,7 @@ router.get('/proximas-a-vencer', requireAuth, async (req, res) => {
 // GET /:id — detalle completo
 router.get('/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
+  const user = req.session.user;
   if (process.env.OFFLINE_MODE !== 'false') {
     const p = solicitudesMemoria.find(x=>x.id===id);
     if (!p) return res.status(404).json({ success:false, error:'No encontrado.' });
@@ -766,6 +767,14 @@ router.get('/:id', requireAuth, async (req, res) => {
       pool.query('SELECT * FROM permiso_equipos   WHERE permiso_id=$1 ORDER BY id', [id]),
     ]);
     if (!rP.rows.length) return res.status(404).json({ success:false, error:'No encontrado.' });
+
+    // IDOR: contratistas solo pueden ver sus propios permisos
+    const solicitud = rP.rows[0];
+    if (user.rol === 'contratista' &&
+        (solicitud.empresa || '').toLowerCase().trim() !== (user.nombre_completo || '').toLowerCase().trim()) {
+      return res.status(403).json({ success: false, error: 'Sin acceso a este permiso.' });
+    }
+
     const personal = rPer.rows;
     try {
       for (const p of personal) {

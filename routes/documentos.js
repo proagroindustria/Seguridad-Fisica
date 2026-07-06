@@ -276,11 +276,13 @@ router.post('/subir', requireAuth, requireContratista, async (req, res) => {
 
             // Buscar empleado por nombre
             if (nombreIMSS) {
-              const partes    = nombreIMSS.split(' ');
-              const primerNom = partes[0] || '';
+              // Coincidencia exacta nombre+apellido para evitar atribuir datos IMSS al trabajador incorrecto
               const empR = await poolDoc.query(
-                `SELECT id FROM trabajadores WHERE activo=true AND LOWER(nombre) LIKE $1 LIMIT 1`,
-                [`%${primerNom.toLowerCase()}%`]
+                `SELECT id FROM trabajadores
+                 WHERE activo = true
+                   AND LOWER(TRIM(nombre || ' ' || apellido)) = LOWER(TRIM($1))
+                 LIMIT 1`,
+                [nombreIMSS]
               );
               if (empR.rows.length > 0) {
                 await poolDoc.query(

@@ -12,4 +12,7 @@ public/credenciales/
 # Archivos basura
 *copy.js
 
+# Configuración local de Claude Code
+.claude/
+
 

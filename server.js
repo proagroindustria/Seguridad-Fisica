@@ -23,8 +23,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/models', express.static(path.join(__dirname, 'public', 'models')));
 
+if (!process.env.SESSION_SECRET) {
+  throw new Error('FATAL: SESSION_SECRET no está configurado en .env');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'proagro_secret_2024',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false }

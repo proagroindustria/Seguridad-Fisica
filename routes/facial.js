@@ -693,8 +693,14 @@ router.get('/notificaciones-sin-checkin', requireAuth, async (req, res) => {
 });
 
 // ─── POST /facial/registrar-invitado ─────────────────────────────────────
-// Llamado por N8N. No requiere sesión de usuario (es un webhook interno).
-router.post('/registrar-invitado', async (req, res) => {
+// Llamado por N8N con el header x-webhook-secret = N8N_WEBHOOK_SECRET.
+router.post('/registrar-invitado', (req, res, next) => {
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+  if (!secret || req.headers['x-webhook-secret'] !== secret) {
+    return res.status(401).json({ success: false, error: 'No autorizado' });
+  }
+  next();
+}, async (req, res) => {
   const { nombre, apellido, empresa, permiso_id, nss } = req.body;
   if (!nombre || !apellido) {
     return res.status(400).json({ success: false, error: 'nombre y apellido son requeridos' });
@@ -806,6 +812,15 @@ router.post('/verificar-qr', requireAuth, requireSeguridad, async (req, res) => 
     }
 
     console.log('[verificar-qr] qrObj parseado:', JSON.stringify(qrObj));
+
+    // Los QR físicos externos traen las claves en MAYÚSCULA (FOLIO, NOMBRE, TRABAJADOR_ID...)
+    // mientras que el QR generado por la app las trae en minúscula. Normalizamos aquí
+    // para soportar ambos formatos.
+    if (qrObj && typeof qrObj === 'object') {
+      qrObj = Object.fromEntries(
+        Object.entries(qrObj).map(([k, v]) => [k.toLowerCase(), v])
+      );
+    }
 
     // Normalizar nombre y empresa (quitar espacios extra, trim)
     const nombre  = typeof qrObj.nombre  === 'string' ? qrObj.nombre.trim().replace(/\s+/g, ' ')  : '';

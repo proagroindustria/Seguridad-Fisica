@@ -95,6 +95,7 @@ router.get('/mis-permisos', requireAuth, async (req, res) => {
 // =====================================================
 router.get('/permiso/:id/responsables', requireAuth, async (req, res) => {
   const pool = getPool();
+  const user = req.session.user;
   try {
     const r = await pool.query(
       `SELECT id, folio, empresa, responsable1, responsable2, responsable_contrato
@@ -103,7 +104,13 @@ router.get('/permiso/:id/responsables', requireAuth, async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ success: false, error: 'Permiso no encontrado' });
     const p = r.rows[0];
-    // Devolver lista de responsables disponibles (los que no sean null)
+
+    // IDOR: contratistas solo pueden consultar sus propios permisos
+    if (user.rol === 'contratista' &&
+        (p.empresa || '').toLowerCase().trim() !== (user.nombre_completo || '').toLowerCase().trim()) {
+      return res.status(403).json({ success: false, error: 'Sin acceso a este permiso.' });
+    }
+
     const responsables = [];
     if (p.responsable1) responsables.push(p.responsable1);
     if (p.responsable2) responsables.push(p.responsable2);
@@ -119,7 +126,19 @@ router.get('/permiso/:id/responsables', requireAuth, async (req, res) => {
 // =====================================================
 router.get('/permiso/:id/equipos', requireAuth, async (req, res) => {
   const pool = getPool();
+  const user = req.session.user;
   try {
+    // IDOR: contratistas solo pueden consultar sus propios permisos
+    if (user.rol === 'contratista') {
+      const pRes = await pool.query(
+        `SELECT empresa FROM permisos WHERE id = $1`, [req.params.id]
+      );
+      if (!pRes.rows.length) return res.status(404).json({ success: false, error: 'Permiso no encontrado' });
+      if ((pRes.rows[0].empresa || '').toLowerCase().trim() !== (user.nombre_completo || '').toLowerCase().trim()) {
+        return res.status(403).json({ success: false, error: 'Sin acceso a este permiso.' });
+      }
+    }
+
     const r = await pool.query(
       `SELECT id, descripcion, marca, modelo, serie, cantidad
        FROM permiso_equipos WHERE permiso_id = $1 ORDER BY id`,
