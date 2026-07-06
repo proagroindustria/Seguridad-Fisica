@@ -649,12 +649,12 @@
   </div>
 
   <script>
-    const USER_ROL = <%- JSON.stringify(user.rol) %>;
-    const USER_ID = <%- JSON.stringify(user.id) %>;
+    const USER_ROL = '<%= user.rol %>';
+    const USER_ID = '<%= user.id %>';
   </script>
   <script>
-    window._userRol = <%- JSON.stringify(user.rol) %>;
-    window._userEmpresa = <%- JSON.stringify(user.nombre_completo) %>;
+    window._userRol = '<%= user.rol %>';
+    window._userEmpresa = '<%= user.nombre_completo %>';
     // Abrir modal de enrolamiento si viene con ?accion=enrolar
     window.addEventListener('load', () => {
       const params = new URLSearchParams(window.location.search);
