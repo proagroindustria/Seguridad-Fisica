@@ -770,15 +770,17 @@ router.get('/:id', requireAuth, async (req, res) => {
     try {
       for (const p of personal) {
         if (!p.nombre) continue;
-        const pri = p.nombre.trim().split(' ')[0].toLowerCase();
-        const empR = await poolFacial.query(`SELECT imss_vigente, imss_estatus, imss_fecha_vigencia, imss_nss FROM trabajadores WHERE activo=true AND LOWER(nombre) LIKE $1 LIMIT 1`, [`%${pri}%`]);
+        const empR = p.trabajador_id
+          ? await poolFacial.query(`SELECT imss_vigente, imss_estatus, imss_fecha_vigencia, imss_nss FROM trabajadores WHERE id=$1 AND activo=true LIMIT 1`, [p.trabajador_id])
+          : await poolFacial.query(`SELECT imss_vigente, imss_estatus, imss_fecha_vigencia, imss_nss FROM trabajadores WHERE activo=true AND LOWER(CONCAT(nombre,' ',apellido))=LOWER($1) LIMIT 1`, [p.nombre.trim()]);
         if (empR.rows.length>0) { p.imss_vigente=empR.rows[0].imss_vigente; p.imss_estatus=empR.rows[0].imss_estatus; p.imss_fecha_vigencia=empR.rows[0].imss_fecha_vigencia; p.imss_nss=empR.rows[0].imss_nss; }
       }
     } catch(e) { console.error('Error IMSS:', e.message); }
     try {
       for (const p of personal) {
         if (!p.nombre) continue;
-        const pri = p.nombre.trim().toLowerCase().split(' ')[0];
+        const whereClause = p.trabajador_id ? 't.id = $1 AND activo = true' : "activo = true AND LOWER(CONCAT(t.nombre,' ',t.apellido)) = LOWER($1)";
+        const matchParam   = p.trabajador_id ? p.trabajador_id : p.nombre.trim();
         const docResult = await poolFacial.query(`
           SELECT t.id,
             COALESCE(
@@ -799,8 +801,8 @@ router.get('/:id', requireAuth, async (req, res) => {
             (SELECT image_base64 FROM documentos WHERE empleado_id = t.id AND doc_type = 'IMSS' LIMIT 1) AS imss_base64,
             (SELECT image_mime    FROM documentos WHERE empleado_id = t.id AND doc_type = 'IMSS' LIMIT 1) AS imss_mime
           FROM trabajadores t
-          WHERE activo = true AND LOWER(t.nombre) LIKE $1
-          LIMIT 1`, [`%${pri}%`]);
+          WHERE ${whereClause}
+          LIMIT 1`, [matchParam]);
         if (docResult.rows.length>0) { p.cred_base64=docResult.rows[0].cred_base64||null; p.cred_mime=docResult.rows[0].cred_mime||'image/jpeg'; p.imss_base64=docResult.rows[0].imss_base64||null; p.imss_mime=docResult.rows[0].imss_mime||'image/jpeg'; }
       }
     } catch(e) { console.error('Error docs:', e.message); }
