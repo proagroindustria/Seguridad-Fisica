@@ -165,6 +165,112 @@
     </div>
   </div>
 
+  <% if (typeof cambioPassword !== 'undefined' && cambioPassword) { %>
+  <!-- MODAL: cambio obligatorio de contraseña (primer acceso) -->
+  <div id="modalCambioPassword" style="
+    position:fixed;inset:0;z-index:1000;
+    background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div style="
+      width:100%;max-width:420px;background:#111;
+      border:1px solid #c9a227;box-shadow:0 0 40px rgba(201,162,39,0.15);
+      padding:28px;">
+      <p style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:#c9a227;margin:0 0 6px">
+        PRIMER ACCESO DETECTADO
+      </p>
+      <h2 style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;color:#eee;margin:0 0 8px">
+        Actualiza tu contraseña
+      </h2>
+      <p style="font-family:'Barlow',sans-serif;font-size:13px;color:#888;margin:0 0 20px">
+        Por seguridad, debes establecer una nueva contraseña antes de continuar.
+      </p>
+
+      <% if (typeof passwordError !== 'undefined' && passwordError) { %>
+      <div style="background:#3a1a1a;border:1px solid #6a2d2d;padding:10px 14px;margin-bottom:16px;
+                  font-family:'Share Tech Mono',monospace;font-size:11px;color:#f87171">
+        ⚠ <%= passwordError %>
+      </div>
+      <% } %>
+
+      <form action="/cambiar-password" method="POST" id="formCambioPassword">
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;color:#777;margin-bottom:6px">
+            NUEVA CONTRASEÑA
+          </label>
+          <input type="password" name="nueva_password" id="nueva_password" required autocomplete="new-password"
+            style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #333;color:#eee;
+                   padding:12px;font-family:'Barlow',sans-serif;font-size:14px;outline:none"
+            onfocus="this.style.borderColor='#c9a227'" onblur="this.style.borderColor='#333'"/>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;color:#777;margin-bottom:6px">
+            CONFIRMAR CONTRASEÑA
+          </label>
+          <input type="password" name="confirmar_password" id="confirmar_password" required autocomplete="new-password"
+            style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #333;color:#eee;
+                   padding:12px;font-family:'Barlow',sans-serif;font-size:14px;outline:none"
+            onfocus="this.style.borderColor='#c9a227'" onblur="this.style.borderColor='#333'"/>
+        </div>
+
+        <!-- Requisitos de contraseña fuerte -->
+        <ul id="reqsPassword" style="list-style:none;padding:12px;margin:0 0 18px;background:#161616;border:1px solid #2a2a2a;
+                                     font-family:'Share Tech Mono',monospace;font-size:11px;color:#666;line-height:1.9">
+          <li data-req="len">✕ Mínimo 8 caracteres</li>
+          <li data-req="mayus">✕ Una letra mayúscula</li>
+          <li data-req="minus">✕ Una letra minúscula</li>
+          <li data-req="num">✕ Un número</li>
+          <li data-req="esp">✕ Un carácter especial (!@#$%...)</li>
+          <li data-req="match">✕ Las contraseñas coinciden</li>
+        </ul>
+
+        <button type="submit" id="btnCambioPassword" disabled
+          style="width:100%;padding:13px;background:#2a2a2a;border:1.5px solid #444;color:#666;
+                 font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;
+                 letter-spacing:2px;cursor:not-allowed;transition:all 0.2s">
+          GUARDAR Y CONTINUAR
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const pass    = document.getElementById('nueva_password');
+      const confirm = document.getElementById('confirmar_password');
+      const btn     = document.getElementById('btnCambioPassword');
+      const items   = document.querySelectorAll('#reqsPassword li');
+
+      function validar() {
+        const v = pass.value;
+        const checks = {
+          len:   v.length >= 8,
+          mayus: /[A-Z]/.test(v),
+          minus: /[a-z]/.test(v),
+          num:   /\d/.test(v),
+          esp:   /[^A-Za-z0-9]/.test(v),
+          match: v.length > 0 && v === confirm.value,
+        };
+        let todoOk = true;
+        items.forEach(li => {
+          const ok = checks[li.dataset.req];
+          li.textContent = (ok ? '✓ ' : '✕ ') + li.textContent.slice(2);
+          li.style.color = ok ? '#4ade80' : '#666';
+          if (!ok) todoOk = false;
+        });
+        btn.disabled = !todoOk;
+        btn.style.background = todoOk ? '#c9a227' : '#2a2a2a';
+        btn.style.borderColor = todoOk ? '#c9a227' : '#444';
+        btn.style.color = todoOk ? '#111' : '#666';
+        btn.style.cursor = todoOk ? 'pointer' : 'not-allowed';
+      }
+
+      pass.addEventListener('input', validar);
+      confirm.addEventListener('input', validar);
+    })();
+  </script>
+  <% } %>
+
   <script>
     // Animación de entrada
     document.addEventListener('DOMContentLoaded', () => {

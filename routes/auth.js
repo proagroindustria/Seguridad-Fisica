@@ -41,7 +41,7 @@ router.post('/login', async (req, res) => {
   try {
     // 1. Buscar en usuarios internos (empleados)
     const result = await poolBDPrincipal.query(
-      `SELECT u.id, u.username, u.password_hash, u.activo,
+      `SELECT u.id, u.username, u.password_hash, u.activo, u.primer_acceso,
               e.nombre, e.apellido_paterno, e.apellido_materno,
               r.nombre as rol
        FROM usuarios u
@@ -70,6 +70,17 @@ router.post('/login', async (req, res) => {
 
       if (!passwordOk)
         return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+
+      // Si es su primer acceso, exigir cambio de contraseña antes de entrar
+      if (!usuario.primer_acceso) {
+        req.session.cambioPasswordPendiente = {
+          id:              usuario.id,
+          username:        usuario.username,
+          rol:             usuario.rol,
+          nombre_completo: `${usuario.nombre} ${usuario.apellido_paterno} ${usuario.apellido_materno || ''}`.trim(),
+        };
+        return res.render('login', { error: null, cambioPassword: true, passwordError: null });
+      }
 
       req.session.user = {
         id:              usuario.id,
@@ -114,6 +125,50 @@ router.post('/login', async (req, res) => {
   } catch(e) {
     console.error('Error login:', e);
     return res.render('login', { error: 'Error del servidor. Intenta de nuevo.' });
+  }
+});
+
+// POST /cambiar-password — cambio obligatorio de contraseña en el primer acceso
+router.post('/cambiar-password', async (req, res) => {
+  const pendiente = req.session.cambioPasswordPendiente;
+  if (!pendiente) return res.redirect('/login');
+
+  const { nueva_password, confirmar_password } = req.body;
+
+  const renderError = (msg) =>
+    res.render('login', { error: null, cambioPassword: true, passwordError: msg });
+
+  if (!nueva_password || !confirmar_password)
+    return renderError('Completa ambos campos.');
+
+  if (nueva_password !== confirmar_password)
+    return renderError('Las contraseñas no coinciden.');
+
+  // Contraseña fuerte: mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial
+  const esFuerte = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(nueva_password);
+  if (!esFuerte)
+    return renderError('La contraseña debe tener mínimo 8 caracteres e incluir mayúscula, minúscula, número y un carácter especial.');
+
+  try {
+    const hash = await bcrypt.hash(nueva_password, 10);
+    await poolBDPrincipal.query(
+      `UPDATE usuarios SET password_hash = $1, primer_acceso = true WHERE id = $2`,
+      [hash, pendiente.id]
+    );
+
+    // Contraseña actualizada: iniciar sesión normalmente
+    req.session.user = {
+      id:              pendiente.id,
+      username:        pendiente.username,
+      rol:             pendiente.rol,
+      nombre_completo: pendiente.nombre_completo,
+    };
+    delete req.session.cambioPasswordPendiente;
+    return res.redirect('/dashboard');
+
+  } catch(e) {
+    console.error('Error cambiando contraseña:', e);
+    return renderError('Error del servidor. Intenta de nuevo.');
   }
 });
 
