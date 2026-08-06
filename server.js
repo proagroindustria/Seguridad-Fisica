@@ -614,6 +614,13 @@ poolMigration.query(
   `ALTER TABLE permiso_personal ADD COLUMN IF NOT EXISTS trabajador_id INTEGER`
 ).catch(e => console.warn('[migration] permiso_personal.trabajador_id:', e.message));
 
+// Foto del vehículo (base64, igual que seguro/licencia/tarjeta).
+// Se deja NULL-able: los permisos ya existentes no la tienen. La obligatoriedad
+// se impone en la app (cliente + POST /solicitudes), no en el esquema.
+poolMigration.query(
+  `ALTER TABLE permiso_vehiculos ADD COLUMN IF NOT EXISTS foto TEXT`
+).catch(e => console.warn('[migration] permiso_vehiculos.foto:', e.message));
+
 app.listen(PORT, () => {
   console.log(`\n🌱 PROAGRO - Sistema de Permisos`);
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);

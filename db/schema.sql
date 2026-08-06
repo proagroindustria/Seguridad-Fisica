@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS permiso_vehiculos (
     placas      VARCHAR(20)  NOT NULL,
     seguro      VARCHAR(255),   -- nombre del archivo adjunto
     licencia    VARCHAR(255),   -- nombre del archivo adjunto
+    foto        TEXT,           -- foto del vehículo en base64 (obligatoria desde la app)
     creado_en   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 

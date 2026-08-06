@@ -136,7 +136,9 @@ async function dispararWebhookN8N(pool, solicitud_id) {
     const correos = await obtenerCorreosPermiso(solicitud?.empresa, solicitud?.responsable_contrato);
     await dispararWebhook(webhookUrl, {
       solicitud: { ...solicitud, ...correos },
-      personal: rPer.rows, vehiculos: rVeh.rows, equipos: rEq.rows
+      // La foto del vehículo se excluye del payload: son ~150 KB por vehículo
+      // encima del seguro, la tarjeta y la licencia que ya viajan aquí.
+      personal: rPer.rows, vehiculos: rVeh.rows.map(({ foto, ...v }) => v), equipos: rEq.rows
     });
   } catch(e) { console.error('❌ WebhookN8N:', e.message); }
 }
@@ -488,7 +490,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     // ── Resolver tokens de documentos (tmp:...) → base64 desde documentos_temp ──
     // Los archivos ya viajaron una vez al validarse; aquí solo llegan referencias.
-    const camposDoc = { personal: ['documento_ine', 'documento'], vehiculo: ['seguro', 'licencia', 'tarjeta_circulacion', 'tarjeta'] };
+    const camposDoc = { personal: ['documento_ine', 'documento'], vehiculo: ['seguro', 'licencia', 'tarjeta_circulacion', 'tarjeta', 'foto'] };
     const tokensUsados = [];
     const filasConToken = [];
     for (const [tipo, campos] of Object.entries(camposDoc)) {
@@ -509,6 +511,19 @@ router.post('/', requireAuth, async (req, res) => {
         return res.status(400).json({ success: false, error: `${faltantes.length} documento(s) expiraron en el servidor — vuelve a adjuntarlos e intenta de nuevo.` });
       }
       for (const { fila, campo } of filasConToken) fila[campo] = porToken[fila[campo]];
+    }
+
+    // ── La foto del vehículo es obligatoria ──
+    // El bloqueo del navegador se puede saltar; este no. Se usa el mismo criterio
+    // de "fila con datos" que el INSERT de abajo, para no rechazar filas vacías.
+    const vehiculosSinFoto = (secciones?.vehiculo || [])
+      .filter(v => (v.marca || v.placas) && !v.foto)
+      .map(v => v.placas || v.marca);
+    if (vehiculosSinFoto.length) {
+      return res.status(400).json({
+        success: false,
+        error: `Falta la foto del vehículo: ${vehiculosSinFoto.join(', ')}.`
+      });
     }
 
     const r1 = await pool.query(
@@ -547,8 +562,8 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     if (sec.vehiculo&&Array.isArray(sec.vehiculo)) { for (const v of sec.vehiculo) { if (!v.marca&&!v.placas) continue; const segExt=v.seguro_extracted||{}, licExt=v.licencia_extracted||{}; const tarExt = v.tarjeta_circulacion_extracted || v.tarjeta_extracted || {};
-await pool.query(`INSERT INTO permiso_vehiculos (permiso_id, marca, modelo, placas, seguro, licencia, tarjeta, seguro_poliza, seguro_aseguradora, seguro_vigencia_inicio, seguro_vigencia_fin, seguro_vigente, seguro_serie, licencia_nombre, licencia_numero, licencia_tipo, licencia_vigencia_fin, licencia_vigente, tarjeta_serie, tarjeta_placas, tarjeta_vigencia_fin, tarjeta_vigente) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
-[pid, v.marca||null, v.modelo||null, v.placas||null, v.seguro||null, v.licencia||null, (v.tarjeta_circulacion||v.tarjeta)||null, segExt.numero_poliza||null, segExt.aseguradora||null, segExt.vigencia_inicio||null, segExt.vigencia_fin||null, segExt.vigente??null, segExt.serie_vehiculo||null, licExt.nombre_conductor||null, licExt.numero_licencia||null, licExt.tipo_licencia||null, licExt.vigencia_fin||null, licExt.vigente??null, tarExt.numero_serie||null, tarExt.placas||null, tarExt.vigencia_fin||null, tarExt.vigente??null]); } }
+await pool.query(`INSERT INTO permiso_vehiculos (permiso_id, marca, modelo, placas, foto, seguro, licencia, tarjeta, seguro_poliza, seguro_aseguradora, seguro_vigencia_inicio, seguro_vigencia_fin, seguro_vigente, seguro_serie, licencia_nombre, licencia_numero, licencia_tipo, licencia_vigencia_fin, licencia_vigente, tarjeta_serie, tarjeta_placas, tarjeta_vigencia_fin, tarjeta_vigente) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+[pid, v.marca||null, v.modelo||null, v.placas||null, v.foto||null, v.seguro||null, v.licencia||null, (v.tarjeta_circulacion||v.tarjeta)||null, segExt.numero_poliza||null, segExt.aseguradora||null, segExt.vigencia_inicio||null, segExt.vigencia_fin||null, segExt.vigente??null, segExt.serie_vehiculo||null, licExt.nombre_conductor||null, licExt.numero_licencia||null, licExt.tipo_licencia||null, licExt.vigencia_fin||null, licExt.vigente??null, tarExt.numero_serie||null, tarExt.placas||null, tarExt.vigencia_fin||null, tarExt.vigente??null]); } }
     if (sec.equipo&&Array.isArray(sec.equipo)) { for (const e of sec.equipo) { if (!e.descripcion&&!e.cantidad) continue; await pool.query(`INSERT INTO permiso_equipos (permiso_id, cantidad, descripcion, marca, modelo, serie, observaciones) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [pid, parseInt(e.cantidad)||1, e.descripcion||null, e.marca||null, e.modelo||null, e.serie||null, e.observaciones||null]); } }
     // Los documentos ya quedaron guardados en el permiso: liberar el stash temporal
     if (tokensUsados.length) {

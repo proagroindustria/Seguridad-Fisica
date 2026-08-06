@@ -551,6 +551,11 @@ const SECTION_COLS = {
     { id: 'marca',    label: 'MARCA',    placeholder: 'Ej. Toyota',    type: 'text', required: true },
     { id: 'modelo',   label: 'MODELO',   placeholder: 'Ej. Hilux',     type: 'text', required: true },
     { id: 'placas',   label: 'PLACAS',   placeholder: 'Ej. ABC-123-D', type: 'text', required: true },
+    // Foto obligatoria. accept="image/*" SIN capture: así el móvil ofrece las tres
+    // vías (cámara del SO, galería, archivos) y el botón 📷 agrega la captura in-app.
+    // 'ligera': se comprime más que los documentos porque no pasa por OCR.
+    { id: 'foto', label: 'FOTO DEL VEHÍCULO', placeholder: '', type: 'file', accept: 'image/*',
+      required: true, camera: true, ligera: true, camaraTitulo: 'VEHÍCULO', camaraAspecto: '4/3' },
     { id: 'seguro',   label: 'SEGURO',   placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
     { id: 'tarjeta_circulacion', label: 'TARJETA DE CIRCULACIÓN', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
     { id: 'licencia', label: 'LICENCIA', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' }
@@ -888,6 +893,9 @@ function buildRowHTML(tipo, rowId, rowNum) {
             <span class="file-label-text" id="fl-${rowId}-${c.id}">Adjuntar</span>
             <input type="file" accept="${c.accept||'*'}" id="finput-${rowId}-${c.id}" onchange="onFileChange('${tipo}','${rowId}','${c.id}',this)">
           </label>
+          ${c.camera ? `<button type="button" onclick="abrirCamaraCampo('${tipo}','${rowId}','${c.id}','${c.camaraTitulo||''}','${c.camaraAspecto||''}')"
+            title="Tomar foto con la cámara"
+            style="flex-shrink:0;background:none;border:1px solid var(--border);color:var(--text-2);cursor:pointer;padding:3px 7px;font-size:13px;line-height:1">📷</button>` : ''}
           <button type="button" id="fbtn-clear-${rowId}-${c.id}" onclick="clearDocumento('${tipo}','${rowId}','${c.id}')"
             title="Quitar documento"
             style="display:none;flex-shrink:0;background:none;border:1px solid var(--danger);color:var(--danger);cursor:pointer;padding:3px 6px;font-size:13px;line-height:1">×</button>
@@ -1216,6 +1224,9 @@ function addRow(tipo) {
   if (!Array.isArray(seccionesAgregadas[tipo])) seccionesAgregadas[tipo] = [];
   seccionesAgregadas[tipo].push({ _id: rowId });
   updateRowCount(tipo);
+  // Una fila nueva de vehículo nace sin foto ni documentos: refrescar el aviso
+  // para que el botón no siga habilitado por las filas anteriores.
+  if (tipo === 'vehiculo') { actualizarAlertaVehiculos(); verificarBotonSubmit(); }
 }
 
 
@@ -1230,6 +1241,11 @@ function deleteRow(tipo, rowId) {
   const tbody = document.getElementById(`tbody-${tipo}`);
   if (tbody) Array.from(tbody.rows).forEach((r, i) => { if(r.cells[0]) r.cells[0].textContent = i + 1; });
   updateRowCount(tipo);
+  if (tipo === 'vehiculo') {
+    delete vehicValidaciones[rowId];
+    actualizarAlertaVehiculos();
+    verificarBotonSubmit();
+  }
 }
 
 
@@ -1275,6 +1291,18 @@ function actualizarAlertaVehiculos() {
     if (fila.validacion_licencia_vigente === false) problemas.push(`Fila ${num}: LICENCIA VENCIDA`);
   });
 
+  // Lo que falta por subir. Va en el aviso ámbar (pendiente) y no en 'problemas'
+  // (rojo), para no marcar como error una fila recién agregada y todavía vacía.
+  // Sin esto, faltar la foto deja el botón bloqueado sin decir por qué.
+  const pendientes = [];
+  filas.forEach((fila, idx) => {
+    const faltan = [];
+    if (!fila.foto)     faltan.push('foto');
+    if (!fila.seguro)   faltan.push('seguro');
+    if (!fila.licencia) faltan.push('licencia');
+    if (faltan.length) pendientes.push(`Fila ${idx + 1}: falta ${faltan.join(', ')}`);
+  });
+
   const todosValidos = filas.every(fila => fila.validacion_ok === true);
 
   if (problemas.length > 0) {
@@ -1294,7 +1322,9 @@ function actualizarAlertaVehiculos() {
     alertEl.style.background = 'rgba(245,158,11,0.06)';
     alertEl.style.border = '1px solid #f59e0b';
     alertEl.style.padding = '10px 14px';
-    alertEl.innerHTML = '⏳ Sube y valida seguro y licencia de cada vehículo.';
+    alertEl.innerHTML = pendientes.length
+      ? '⏳ ' + pendientes.map(p => `• ${p}`).join(' ')
+      : '⏳ Sube y valida foto, seguro y licencia de cada vehículo.';
     btnSubmit.disabled = true;
     btnSubmit.style.opacity = '0.4';
     btnSubmit.style.cursor = 'not-allowed';
@@ -1360,10 +1390,19 @@ function clearDocumento(tipo, rowId, fieldId) {
     delete row[fieldId];
     delete row[`${fieldId}_mime`];
     delete row[`${fieldId}_nombre`];
+    delete row[`${fieldId}_extracted`];
     row._docInlineValidado = false;
     delete row._nombreExtraido;
     delete row._docTipo;
     delete row._docVencInfo;
+  }
+
+  // Quitar un documento invalida la fila: hay que recalcular, si no el botón de
+  // envío se queda habilitado con la fila incompleta.
+  if (tipo === 'vehiculo') {
+    if (vehicValidaciones[rowId]) delete vehicValidaciones[rowId][fieldId];
+    verificarDocumentosVehiculo(tipo, rowId);
+    actualizarAlertaVehiculos();
   }
 
   verificarBotonSubmit();
@@ -1374,6 +1413,8 @@ async function onFileChange(tipo, rowId, fieldId, input) {
   const label = document.getElementById(`fl-${rowId}-${fieldId}`);
   if (!file) return;
   if (label) label.textContent = '⏳ Procesando...';
+
+  const colDef = (SECTION_COLS[tipo] || []).find(c => c.id === fieldId) || {};
 
   try {
     let base64, mimeFinal = file.type;
@@ -1389,7 +1430,7 @@ async function onFileChange(tipo, rowId, fieldId, input) {
       base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       mimeFinal = 'image/jpeg';
     } else {
-      base64 = await comprimirImagenVehiculo(file);
+      base64 = await comprimirImagenVehiculo(file, colDef.ligera ? COMPRESION_LIGERA : null);
       mimeFinal = 'image/jpeg';
     }
 
@@ -1474,6 +1515,12 @@ async function onFileChange(tipo, rowId, fieldId, input) {
       if (label) label.textContent = '✅ ' + (nombre.length > 12 ? nombre.substring(0,12)+'…' : nombre);
       const cb = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
       if (cb) cb.style.display = 'inline-block';
+      // Campos sin análisis de IA (foto del vehículo): recalcular aquí, porque
+      // la rama de arriba —la única que lo hacía— nunca se ejecuta para ellos.
+      if (tipo === 'vehiculo') {
+        verificarDocumentosVehiculo(tipo, rowId);
+        actualizarAlertaVehiculos();
+      }
     }
 
     updateRowCount(tipo);
@@ -1491,7 +1538,16 @@ async function onFileChange(tipo, rowId, fieldId, input) {
 
 
 
-async function comprimirImagenVehiculo(file) {
+// Los documentos (seguro, licencia, tarjeta) se comprimen poco porque van a OCR
+// con IA. Las imágenes que NO pasan por IA —la foto del vehículo— usan el preset
+// ligero: pesan ~1/3. Cada imagen sube por separado a /documentos/stash (el POST
+// final solo lleva tokens), así que esto es para subir más rápido en móvil y para
+// no engordar la fila en la BD, no para esquivar el límite de nginx.
+const COMPRESION_LIGERA = { max: 1280, calidad: 0.75 };
+
+async function comprimirImagenVehiculo(file, opciones) {
+  const MAX     = opciones?.max     || 1800;
+  const CALIDAD = opciones?.calidad || 0.88;
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
@@ -1501,14 +1557,13 @@ async function comprimirImagenVehiculo(file) {
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let w = img.width, h = img.height;
-        const MAX = 1800;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
           else       { w = Math.round(w * MAX / h); h = MAX; }
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
+        resolve(canvas.toDataURL('image/jpeg', CALIDAD).split(',')[1]);
       };
       img.src = e.target.result;
     };
@@ -1546,14 +1601,21 @@ function verificarDocumentosVehiculo(tipo, rowId) {
   const fechaLic = parseFecha(licExt.vigencia_fin);
   const licVigente = fechaLic ? fechaLic >= hoy : (licExt.vigente === true);
 
+  // La foto es obligatoria, pero no tiene vigencia: solo cuenta que esté.
+  const tieneFoto = !!row.foto;
+  const completo  = !!row.seguro && !!row.licencia && tieneFoto;
+
   row.validacion_seguro_vigente   = segVigente;
   row.validacion_licencia_vigente = licVigente;
-  row.validacion_ok = segVigente && licVigente;
+  row.validacion_foto             = tieneFoto;
+  // 'completo' en el AND: si se quita un documento con la ×, la fila deja de ser
+  // válida y el botón de envío se vuelve a bloquear.
+  row.validacion_ok = completo && segVigente && licVigente;
 
   const valEl = document.getElementById(`val-${rowId}`);
   if (!valEl) return;
 
-  if (!row.seguro || !row.licencia) {
+  if (!completo) {
     valEl.textContent = '⏳ Falta doc.';
     valEl.style.color = 'var(--text-muted)';
     return;
@@ -1561,7 +1623,8 @@ function verificarDocumentosVehiculo(tipo, rowId) {
 
   const lineas = [
     segVigente ? '✅ Seguro vigente'   : `❌ Seguro vencido (${segExt.vigencia_fin||'—'})`,
-    licVigente ? '✅ Licencia vigente' : `❌ Licencia vencida (${licExt.vigencia_fin||'—'})`
+    licVigente ? '✅ Licencia vigente' : `❌ Licencia vencida (${licExt.vigencia_fin||'—'})`,
+    '✅ Foto del vehículo'
   ];
   valEl.innerHTML = lineas.join('<br>');
   valEl.style.color = row.validacion_ok ? 'var(--success)' : '#ef4444';
@@ -1647,6 +1710,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const btnHtml = _pvSubmitLabel(isPaseVisitaActive());
       for (const v of (seccionesAgregadas.vehiculo || [])) {
         const placa = v.placas || v.marca || 'vehículo';
+        if (!v.foto) {
+          alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: debe adjuntar o tomar la foto del vehículo.`;
+          alertEl.style.display = 'block';
+          btn.disabled = false; btn.innerHTML = btnHtml; return;
+        }
         if (!v.seguro || !v.licencia) {
           alertEl.innerHTML = `❌ <strong>Vehículo "${placa}"</strong>: debe adjuntar seguro y licencia.`;
           alertEl.style.display = 'block';
@@ -2144,13 +2212,16 @@ lotes.forEach(lote => {
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="detalle-table">
           <thead><tr>
-             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>SERIE</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
+             <th>#</th><th>MARCA</th><th>MODELO</th><th>PLACAS</th><th>FOTO</th><th>SERIE</th><th>SEGURO</th><th>TARJETA DE CIRCULACIÓN</th><th>LICENCIA</th>
           </tr></thead>
           <tbody>${vehiculos.map((v,i) => `<tr>
             <td style="color:var(--text-3);font-family:'Share Tech Mono',monospace">${i+1}</td>
             <td style="color:var(--text);font-weight:500">${escapeHtml(v.marca||'—')}</td>
             <td>${escapeHtml(v.modelo||'—')}</td>
             <td>${escapeHtml(v.placas||'—')}</td>
+            <td>${v.foto && (v.foto.startsWith('/9j') || v.foto.startsWith('iVB') || v.foto.startsWith('data:')) ?
+              `<img src="${v.foto.startsWith('data:') ? v.foto : 'data:image/jpeg;base64,' + v.foto}" onclick="verImgDoc(this.src)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver foto del vehículo">`
+              : '—'}</td>
             <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-2)">${escapeHtml(v.seguro_serie||'—')}</td>
             <td>${v.seguro && (v.seguro.startsWith('/9j') || v.seguro.startsWith('iVB') || v.seguro.startsWith('data:')) ?
               `<img src="${v.seguro.startsWith('data:') ? v.seguro : 'data:image/jpeg;base64,' + v.seguro}" data-serie="${escapeHtml(v.seguro_serie||'')}" onclick="verImgDoc(this.src,this.dataset.serie)" style="height:36px;cursor:pointer;border:1px solid var(--border);object-fit:cover" title="Ver seguro">`

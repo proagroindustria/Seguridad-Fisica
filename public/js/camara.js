@@ -127,14 +127,31 @@ const DocScanner = {
   stream: null,
   videoEl: null,
   onCaptura: null,
+  opciones: null,
+
+  // Marco guía por defecto: credencial (enrolamiento). Otros usos —como la foto
+  // del vehículo— pasan su propio título y proporción a abrir().
+  OPCIONES_DEFAULT: {
+    titulo:  'CREDENCIAL / PASAPORTE / LICENCIA',
+    aspecto: '85.6/54',
+    archivo: 'foto-documento.jpg',
+  },
 
   esMobile() {
     return ('ontouchstart' in window && navigator.maxTouchPoints > 0) ||
            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   },
 
-  async abrir(onCaptura) {
+  async abrir(onCaptura, opciones) {
     this.onCaptura = onCaptura;
+    // Ojo: no usar spread aquí — una clave presente con valor undefined
+    // sobreescribiría el default.
+    const o = opciones || {};
+    this.opciones = {
+      titulo:  o.titulo  || this.OPCIONES_DEFAULT.titulo,
+      aspecto: o.aspecto || this.OPCIONES_DEFAULT.aspecto,
+      archivo: o.archivo || this.OPCIONES_DEFAULT.archivo,
+    };
     this._crearModal();
 
     try {
@@ -173,18 +190,18 @@ const DocScanner = {
           <video id="docCam-video" autoplay muted playsinline
             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
 
-          <!-- Marco guía del documento (proporción tarjeta/credencial) -->
-          <div style="
+          <!-- Marco guía (proporción y título según lo que se esté fotografiando) -->
+          <div id="docCam-marco" style="
             position:relative;z-index:2;
             width:84vw;max-width:480px;
             aspect-ratio:85.6/54;
             pointer-events:none;
           ">
-            <div style="
+            <div id="docCam-guiaTitulo" style="
               position:absolute;top:-34px;left:0;right:0;text-align:center;
               font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:0.12em;
               color:rgba(245,166,35,0.95);text-shadow:0 1px 4px rgba(0,0,0,0.9);
-            ">CREDENCIAL / PASAPORTE / LICENCIA</div>
+            "></div>
 
             <!-- Sombra exterior + borde -->
             <div style="
@@ -233,6 +250,15 @@ const DocScanner = {
       const btn = document.getElementById('docCam-btnCapturar');
       if (btn) { btn.disabled = true; btn.textContent = '📷 CAPTURAR FOTO'; }
     }
+
+    // El modal se reutiliza entre aperturas: el marco guía se aplica siempre,
+    // no solo al crearlo.
+    const opts = this.opciones || this.OPCIONES_DEFAULT;
+    const guiaEl  = document.getElementById('docCam-guiaTitulo');
+    const marcoEl = document.getElementById('docCam-marco');
+    if (guiaEl)  guiaEl.textContent = opts.titulo;
+    if (marcoEl) marcoEl.style.aspectRatio = opts.aspecto;
+
     this.videoEl = null;
   },
 
@@ -249,10 +275,11 @@ const DocScanner = {
     const btn = document.getElementById('docCam-btnCapturar');
     if (btn) { btn.textContent = '✅ CAPTURADO'; btn.disabled = true; }
 
+    const nombre = (this.opciones || this.OPCIONES_DEFAULT).archivo;
     canvas.toBlob(blob => {
       this.cerrar();
       if (this.onCaptura && blob) {
-        const file = new File([blob], 'foto-documento.jpg', { type: 'image/jpeg' });
+        const file = new File([blob], nombre, { type: 'image/jpeg' });
         this.onCaptura(file);
       }
     }, 'image/jpeg', 0.92);
@@ -268,6 +295,23 @@ const DocScanner = {
     this.videoEl = null;
   },
 };
+
+// ───────────────────────────────────────────────────
+// abrirCamaraCampo — captura in-app para una celda de archivo
+// de las tablas del modal (hoy: foto del vehículo).
+// La foto capturada entra por la MISMA tubería que un archivo
+// adjunto: onFileChange solo necesita un objeto con .files[0].
+// ───────────────────────────────────────────────────
+function abrirCamaraCampo(tipo, rowId, fieldId, titulo, aspecto) {
+  DocScanner.abrir(
+    file => onFileChange(tipo, rowId, fieldId, { files: [file] }),
+    {
+      titulo:  titulo  || undefined,
+      aspecto: aspecto || undefined,
+      archivo: `foto-${fieldId}.jpg`,
+    }
+  );
+}
 
 // ───────────────────────────────────────────────────
 // abrirCamaraDoc — conecta DocScanner con enrolamiento
