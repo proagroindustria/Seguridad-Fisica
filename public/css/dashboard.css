@@ -323,9 +323,78 @@ html, body {
 .table-container {
   background: var(--bg-2);
   border: 1px solid var(--border);
-  overflow: hidden;
+  /* auto (no hidden): en pantallas medianas la tabla se recortaba sin barra */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-3) var(--bg-3);
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
+.table-container::-webkit-scrollbar { height: 12px; }
+.table-container::-webkit-scrollbar-track { background: var(--bg-3); border-top: 1px solid var(--border); }
+.table-container::-webkit-scrollbar-thumb { background: var(--text-3); border: 2px solid var(--bg-3); }
+.table-container::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Contenedor que ocupa el alto disponible: la tabla scrollea dentro,
+   el pie de paginación queda siempre visible */
+.table-container.table-fill {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-3) var(--bg-3);
+}
+.table-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.table-scroll::-webkit-scrollbar-track { background: var(--bg-3); }
+.table-scroll::-webkit-scrollbar-thumb { background: var(--text-3); border: 2px solid var(--bg-3); }
+.table-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Encabezado fijo mientras se scrollea la tabla */
+.table-scroll .data-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--black);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Pie de paginación */
+.table-pagination {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.table-pagination .pag-info {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text-3);
+}
+.table-pagination .pag-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.table-pagination select {
+  padding: 6px 10px; background: var(--bg-2);
+  border: 1px solid var(--border); color: var(--text);
+  font-family: 'Barlow', sans-serif; font-size: 12px;
+}
+.pag-btn {
+  padding: 6px 10px;
+  background: var(--bg-2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
+  cursor: pointer; transition: all 0.15s;
+}
+.pag-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pag-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pag-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.pag-dots { padding: 6px 4px; color: var(--text-3); font-size: 12px; }
 
 .table-loading {
   display: flex; align-items: center; justify-content: center;
@@ -663,10 +732,36 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .sec-table-desc { display: block; font-size: 11px; color: #aaa; margin-top: 2px; }
 .sec-table-header-right { display: flex; align-items: center; gap: 10px; }
 
-.sec-table-wrap { overflow-x: visible; overflow-y: visible; }
+/* Contenedor con scroll horizontal SIEMPRE (no solo en móvil): las tablas de
+   vehículos/personal tienen más columnas de las que caben en el modal y antes
+   quedaban recortadas por el overflow:hidden de .dnd-expanded-card.
+   El max-height mantiene el thead sticky útil cuando hay muchos registros. */
+.sec-table-wrap {
+  overflow: auto;
+  max-height: 60vh;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-3) var(--bg-3);
+  /* Sombras de scroll: indican que hay más columnas hacia los lados */
+  background:
+    linear-gradient(to right, var(--bg-2) 0%, rgba(255,255,255,0) 100%) left center,
+    linear-gradient(to left,  var(--bg-2) 0%, rgba(255,255,255,0) 100%) right center,
+    radial-gradient(farthest-side at 0 50%,   rgba(0,0,0,0.16), rgba(0,0,0,0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.16), rgba(0,0,0,0)) right center;
+  background-repeat: no-repeat;
+  background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Barra horizontal visible y con contraste (la global de 6px casi no se ve) */
+.sec-table-wrap::-webkit-scrollbar { height: 12px; width: 10px; }
+.sec-table-wrap::-webkit-scrollbar-track { background: var(--bg-3); border-top: 1px solid var(--border); }
+.sec-table-wrap::-webkit-scrollbar-thumb { background: var(--text-3); border: 2px solid var(--bg-3); }
+.sec-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 .sec-table { width: 100%; border-collapse: collapse; min-width: 500px; }
 .sec-table thead { position: sticky; top: 0; z-index: 2; background: var(--bg-3); }
+.sec-table thead th { position: sticky; top: 0; background: var(--bg-3); }
 .sec-table thead tr { border-bottom: 2px solid var(--border); }
 .sec-table th {
   font-family: 'Share Tech Mono', monospace;
@@ -688,7 +783,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .col-del { width: 36px; text-align: center; }
 
 .cell-input {
-  width: 100%; min-width: 80px;
+  width: 100%; min-width: 95px;
   background: transparent; border: 1px solid transparent;
   border-bottom: 1px solid var(--border);
   color: var(--text); font-family: 'Barlow', sans-serif; font-size: 13px;
@@ -698,7 +793,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .cell-input::placeholder { color: var(--text-3); font-size: 12px; }
 input[type="number"].cell-input { width: 70px; min-width: 60px; }
 
-.cell-file { min-width: 120px; }
+.cell-file { min-width: 150px; }
 
 .dnd-file-btn {
   display: flex; align-items: center; gap: 6px;
@@ -1012,8 +1107,10 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
 .facial-field input:focus { outline: none; border-color: var(--accent); }
 
 /* AUTOCOMPLETE */
+/* Fixed (no absolute): la tabla ahora tiene scroll propio y recortaría el
+   desplegable. La posición la calcula posicionarSugerencias() en dashboard.js */
 .empleado-suggestions {
-  position: absolute; top: 100%; left: 0; right: 0;
+  position: fixed; top: 0; left: 0; min-width: 180px;
   background: var(--bg-2); border: 1px solid var(--accent);
   z-index: 1000; max-height: 200px; overflow-y: auto;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
@@ -1171,8 +1268,8 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
   .dnd-form-row { grid-template-columns: 1fr; }
   .dnd-palette { gap: 6px; }
 
-  /* Tabla de secciones con scroll horizontal */
-  .sec-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Tabla de secciones: el scroll ya se define en la regla base */
+  .sec-table-wrap { max-height: 65vh; }
 
   /* Facial */
   .facial-form-grid { grid-template-columns: 1fr; }
@@ -1267,8 +1364,9 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
   .dnd-hint-desktop { display: none; }
   .dnd-hint-mobile  { display: inline; }
 
-  /* Tabla de secciones con scroll horizontal en móvil */
-  .sec-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Tabla de secciones: scroll definido en la regla base; barra más gruesa al tacto */
+  .sec-table-wrap { max-height: 70vh; }
+  .sec-table-wrap::-webkit-scrollbar { height: 14px; }
 
   /* Botón primario sin clip-path (evita que el área táctil se recorte) */
   .btn-primary { clip-path: none; padding: 10px 16px; }

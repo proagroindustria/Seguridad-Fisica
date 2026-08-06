@@ -179,27 +179,46 @@
       </div>
 
       <!-- TABLA -->
-      <div class="table-container">
-        <div id="personalLoading" class="table-loading">
-          <div class="loading-spinner"></div>
-          <span>Cargando personal...</span>
+      <div class="table-container table-fill">
+        <div class="table-scroll" id="personalScroll">
+          <div id="personalLoading" class="table-loading">
+            <div class="loading-spinner"></div>
+            <span>Cargando personal...</span>
+          </div>
+          <table class="data-table" id="personalTable" style="display:none">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>NOMBRE</th>
+                <% if (user.rol === 'seguridad_fisica') { %><th>EMPRESA</th><% } %>
+                <th>NO. EMPLEADO</th>
+                <th>NSS</th>
+                <th>ÁREA</th>
+                <th>ESTATUS</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="personalTbody"></tbody>
+          </table>
+          <div id="personalEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">No se encontraron trabajadores.</div>
         </div>
-        <table class="data-table" id="personalTable" style="display:none">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>NOMBRE</th>
-              <% if (user.rol === 'seguridad_fisica') { %><th>EMPRESA</th><% } %>
-              <th>NO. EMPLEADO</th>
-              <th>NSS</th>
-              <th>ÁREA</th>
-              <th>ESTATUS</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="personalTbody"></tbody>
-        </table>
-        <div id="personalEmpty" style="display:none;padding:60px;text-align:center;color:var(--text-3)">No se encontraron trabajadores.</div>
+
+        <div class="table-pagination" id="paginacionPersonal" style="display:none">
+          <div class="pag-info" id="paginaInfoPersonal"></div>
+          <div class="pag-controls">
+            <select id="porPaginaPersonal" onchange="cambiarPorPaginaPersonal()">
+              <option value="25" selected>25 por página</option>
+              <option value="50">50 por página</option>
+              <option value="100">100 por página</option>
+              <option value="0">Todos</option>
+            </select>
+            <button class="pag-btn" id="btnPrimeraPersonal" onclick="irPaginaPersonal(1)">«</button>
+            <button class="pag-btn" id="btnAnteriorPersonal" onclick="irPaginaPersonal(paginaActualPersonal-1)">‹ ANT</button>
+            <div id="numPaginasPersonal" style="display:flex;gap:4px"></div>
+            <button class="pag-btn" id="btnSiguientePersonal" onclick="irPaginaPersonal(paginaActualPersonal+1)">SIG ›</button>
+            <button class="pag-btn" id="btnUltimaPersonal" onclick="irPaginaPersonal(totalPaginasPersonal)">»</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -331,6 +350,11 @@
     let allPersonal = [];
     let currentEmpleadoId = null;
 
+    // Paginación
+    let filtradosPersonal   = [];
+    let paginaActualPersonal = 1;
+    let totalPaginasPersonal = 1;
+
     // Variables enrolamiento
     let facialDescriptorEnrol = null;
     let facialModelos = false;
@@ -384,12 +408,13 @@
       }
     }
 
-    function filtrarPersonal() {
+    // mantenerPagina = true al refrescar tras cambiar un estatus, para no saltar a la página 1
+    function filtrarPersonal(mantenerPagina) {
       const busq    = document.getElementById('searchPersonal').value.toLowerCase();
       const empresa = ROL === 'seguridad_fisica' ? document.getElementById('filtroEmpresa').value : '';
       const estatus = document.getElementById('filtroEstatus').value;
 
-      const filtrados = allPersonal.filter(e => {
+      filtradosPersonal = allPersonal.filter(e => {
         const nombre = ((e.nombre||'') + ' ' + (e.apellido||'')).toLowerCase();
         const matchBusq    = !busq || nombre.includes(busq) || (e.documento_identidad||'').toLowerCase().includes(busq) || (e.cargo||'').toLowerCase().includes(busq);
         const matchEmpresa = !empresa || e.empresa === empresa;
@@ -397,11 +422,62 @@
         return matchBusq && matchEmpresa && matchEstatus;
       });
 
-      renderTabla(filtrados);
-      document.getElementById('totalPersonal').textContent = filtrados.length + ' trabajador(es)';
+      document.getElementById('totalPersonal').textContent = filtradosPersonal.length + ' trabajador(es)';
+      irPaginaPersonal(mantenerPagina === true ? paginaActualPersonal : 1);
     }
 
-    function renderTabla(data) {
+    function cambiarPorPaginaPersonal() { irPaginaPersonal(1); }
+
+    function irPaginaPersonal(n) {
+      const sel = document.getElementById('porPaginaPersonal');
+      const valor = parseInt(sel.value);
+      // 0 = "Todos"
+      const porPagina = valor > 0 ? valor : Math.max(1, filtradosPersonal.length);
+
+      totalPaginasPersonal = Math.max(1, Math.ceil(filtradosPersonal.length / porPagina));
+      paginaActualPersonal = Math.min(Math.max(1, n), totalPaginasPersonal);
+
+      const inicio = (paginaActualPersonal - 1) * porPagina;
+      renderTabla(filtradosPersonal.slice(inicio, inicio + porPagina), inicio);
+      actualizarPaginacionPersonal(porPagina);
+
+      // Volver arriba de la tabla al cambiar de página
+      const scroll = document.getElementById('personalScroll');
+      if (scroll) scroll.scrollTop = 0;
+    }
+
+    function actualizarPaginacionPersonal(porPagina) {
+      const pag = document.getElementById('paginacionPersonal');
+      if (!filtradosPersonal.length) { pag.style.display = 'none'; return; }
+      pag.style.display = 'flex';
+
+      const inicio = (paginaActualPersonal - 1) * porPagina + 1;
+      const fin    = Math.min(paginaActualPersonal * porPagina, filtradosPersonal.length);
+      document.getElementById('paginaInfoPersonal').textContent =
+        'Mostrando ' + inicio + '–' + fin + ' de ' + filtradosPersonal.length + ' trabajadores';
+
+      document.getElementById('btnPrimeraPersonal').disabled   = paginaActualPersonal === 1;
+      document.getElementById('btnAnteriorPersonal').disabled  = paginaActualPersonal === 1;
+      document.getElementById('btnSiguientePersonal').disabled = paginaActualPersonal === totalPaginasPersonal;
+      document.getElementById('btnUltimaPersonal').disabled    = paginaActualPersonal === totalPaginasPersonal;
+
+      // Números de página (ventana de 2 a cada lado)
+      let html = '';
+      const ventana = 2;
+      for (let i = 1; i <= totalPaginasPersonal; i++) {
+        if (i === 1 || i === totalPaginasPersonal || (i >= paginaActualPersonal - ventana && i <= paginaActualPersonal + ventana)) {
+          html += '<button class="pag-btn' + (i === paginaActualPersonal ? ' active' : '') + '" onclick="irPaginaPersonal(' + i + ')">' + i + '</button>';
+        } else if (
+          (i === paginaActualPersonal - ventana - 1 && i > 1) ||
+          (i === paginaActualPersonal + ventana + 1 && i < totalPaginasPersonal)
+        ) {
+          html += '<span class="pag-dots">…</span>';
+        }
+      }
+      document.getElementById('numPaginasPersonal').innerHTML = html;
+    }
+
+    function renderTabla(data, offset = 0) {
       const tbody = document.getElementById('personalTbody');
       const empty = document.getElementById('personalEmpty');
       if (!data.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
@@ -422,7 +498,7 @@
         const fecha = e.creado_en ? new Date(e.creado_en).toLocaleDateString('es-MX') : '—';
 
         return '<tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="verTrabajador(' + e.id + ')" onmouseover="this.style.background=\'var(--bg-3)\'" onmouseout="this.style.background=\'\'">' +
-        '<td class="td-folio">' + (i+1) + '</td>' +
+        '<td class="td-folio">' + (offset + i + 1) + '</td>' +
         '<td><div style="display:flex;align-items:center;gap:10px">' +
           '<div style="width:36px;height:36px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + iniciales + '</div>' +
           '<div style="font-weight:500;color:var(--text)">' + (e.nombre||'') + ' ' + (e.apellido||'') + '</div>' +
@@ -613,7 +689,7 @@
           if (emp) emp.fecha_induccion = inputFecha.value;
         }
         if (emp) { emp.estatus = estatus; emp.activo = estatus === 'activo'; }
-        filtrarPersonal();
+        filtrarPersonal(true);
         cerrarModalTrabajador();
         const msg = document.createElement('div');
         msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--black);color:var(--accent);padding:14px 20px;font-family:Barlow Condensed,sans-serif;font-size:14px;letter-spacing:1px;z-index:9999;border:1px solid var(--accent)';

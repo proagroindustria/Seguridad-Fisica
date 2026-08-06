@@ -953,6 +953,38 @@ function agregarSeccion(tipo) {
 
 
 // ── Autocomplete empleados ───────────────────────
+// El desplegable es position:fixed para que no lo recorte el scroll de la tabla,
+// así que hay que anclarlo manualmente al input de nombre.
+function posicionarSugerencias(rowId) {
+  const sugEl = document.getElementById(`sug-${rowId}`);
+  const inp   = document.getElementById(`inp-${rowId}-nombre`);
+  if (!sugEl || !inp || sugEl.style.display === 'none') return;
+  const r = inp.getBoundingClientRect();
+  // Si el input quedó fuera de la vista (scroll horizontal de la tabla), ocultar
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+    sugEl.style.display = 'none';
+    return;
+  }
+  const alto = Math.min(sugEl.scrollHeight, 200);
+  const abajo = window.innerHeight - r.bottom;
+  sugEl.style.width = `${r.width}px`;
+  sugEl.style.left  = `${r.left}px`;
+  // Si no cabe abajo pero sí arriba, se despliega hacia arriba
+  sugEl.style.top   = (abajo < alto && r.top > alto) ? `${r.top - alto}px` : `${r.bottom}px`;
+}
+
+// Reposicionar mientras se hace scroll (tabla o modal) o al redimensionar
+document.addEventListener('scroll', () => {
+  document.querySelectorAll('.empleado-suggestions').forEach(el => {
+    if (el.style.display !== 'none') posicionarSugerencias(el.id.replace(/^sug-/, ''));
+  });
+}, true);
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.empleado-suggestions').forEach(el => {
+    if (el.style.display !== 'none') posicionarSugerencias(el.id.replace(/^sug-/, ''));
+  });
+});
+
 function mostrarSugerencias(rowId) {
   const sugEl = document.getElementById(`sug-${rowId}`);
   if (!sugEl) return;
@@ -972,6 +1004,7 @@ function mostrarSugerencias(rowId) {
     </div>`;
   }).join('');
   sugEl.style.display = 'block';
+  posicionarSugerencias(rowId);
 }
 
 
