@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const multer   = require('multer');
 const { PDFParse } = require('pdf-parse');
 const pdfParse = PDFParse;
@@ -179,6 +180,20 @@ router.get('/logout', (req, res) => {
 });
 
 // ─── MÓDULO ASISTENCIA ─────────────────────────────────
+
+// Credenciales del módulo de asistencia: salen del .env, nunca del código.
+// Si no están configuradas, el login queda deshabilitado (no hay usuario por defecto).
+const ASISTENCIA_USERNAME = process.env.ASISTENCIA_USERNAME;
+const ASISTENCIA_PASSWORD = process.env.ASISTENCIA_PASSWORD;
+
+// Comparación en tiempo constante: evita filtrar el valor midiendo cuánto tarda
+function comparaSeguro(recibido, esperado) {
+  const a = Buffer.from(String(recibido ?? ''), 'utf8');
+  const b = Buffer.from(String(esperado ?? ''), 'utf8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 router.get('/login-asistencia', (req, res) => {
   if (req.session.asistencia_user) return res.redirect('/verificar');
   res.render('login-asistencia', { error: null });
@@ -186,9 +201,19 @@ router.get('/login-asistencia', (req, res) => {
 
 router.post('/login-asistencia', (req, res) => {
   const { username, password } = req.body;
-  if (username === 'admin' && password === '123') {
+
+  if (!ASISTENCIA_USERNAME || !ASISTENCIA_PASSWORD) {
+    console.error('[asistencia] Falta ASISTENCIA_USERNAME o ASISTENCIA_PASSWORD en .env: login deshabilitado.');
+    return res.render('login-asistencia', { error: 'Módulo no configurado. Contacta al administrador.' });
+  }
+
+  // Se evalúan ambas antes de decidir, para no cortocircuitar y delatar cuál falló
+  const okUsuario = comparaSeguro(username, ASISTENCIA_USERNAME);
+  const okPassword = comparaSeguro(password, ASISTENCIA_PASSWORD);
+
+  if (okUsuario && okPassword) {
     req.session.asistencia_user = {
-      id: 0, username: 'admin',
+      id: 0, username: ASISTENCIA_USERNAME,
       rol: 'seguridad_fisica',
       nombre_completo: 'Administrador',
     };

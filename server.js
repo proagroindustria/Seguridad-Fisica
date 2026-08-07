@@ -23,11 +23,24 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/models', express.static(path.join(__dirname, 'public', 'models')));
 
+// Sin SESSION_SECRET la app no arranca: antes caía a un valor por defecto que
+// está en el código fuente, así que un .env que no cargara pasaba desapercibido.
+if (!process.env.SESSION_SECRET) {
+  throw new Error('Falta SESSION_SECRET en el .env. La app no arranca sin él.');
+}
+
+// Detrás de nginx: necesario para que Express detecte HTTPS y mande la cookie secure
+app.set('trust proxy', 1);
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'proagro_secret_2024',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false }
+  cookie: {
+    httpOnly: true,                                 // no accesible desde JS
+    sameSite: 'lax',                                // mitiga CSRF
+    secure: process.env.COOKIE_SECURE === 'true',   // true solo si sirves por HTTPS
+  }
 }));
 
 app.get('/retiros', (req, res) => {
