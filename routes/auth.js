@@ -26,6 +26,68 @@ const poolBDPrincipal = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+// Regenera el ID de sesión antes de autenticar. Sin esto, quien logre fijar una
+// cookie en el navegador de la víctima conserva ese mismo ID después del login y
+// hereda la sesión ya autenticada (session fixation).
+function iniciarSesion(req, res, clave, datos, destino, vistaError = 'login') {
+  return new Promise(resolve => {
+    const fallar = (err, contexto) => {
+      console.error(`[login] ${contexto}:`, err);
+      res.render(vistaError, { error: 'Error del servidor. Intenta de nuevo.' });
+      resolve();
+    };
+    req.session.regenerate(err => {
+      if (err) return fallar(err, 'no se pudo regenerar la sesión');
+      req.session[clave] = datos;
+      // save() explícito: el redirect no debe salir antes de persistir la sesión
+      req.session.save(err2 => {
+        if (err2) return fallar(err2, 'no se pudo guardar la sesión');
+        res.redirect(destino);
+        resolve();
+      });
+    });
+  });
+}
+
+// Limitador de intentos por IP+usuario, en memoria (sin dependencias nuevas).
+// No sustituye a un WAF, pero corta el fuerza bruta contra contraseñas compartidas.
+const MAX_INTENTOS_LOGIN = 8;
+const VENTANA_LOGIN_MS   = 10 * 60 * 1000;
+const intentosLogin      = new Map();
+
+function claveIntento(req) {
+  const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+             || req.socket.remoteAddress || 'desconocida';
+  return `${ip}|${String(req.body?.username ?? '').toLowerCase().trim()}`;
+}
+
+function bloqueadoPorIntentos(req) {
+  const registro = intentosLogin.get(claveIntento(req));
+  return !!registro && registro.expira > Date.now() && registro.n >= MAX_INTENTOS_LOGIN;
+}
+
+function registrarFallo(req) {
+  const clave = claveIntento(req);
+  const previo = intentosLogin.get(clave);
+  const vigente = previo && previo.expira > Date.now();
+  intentosLogin.set(clave, {
+    n: vigente ? previo.n + 1 : 1,
+    expira: vigente ? previo.expira : Date.now() + VENTANA_LOGIN_MS,
+  });
+}
+
+function limpiarIntentos(req) {
+  intentosLogin.delete(claveIntento(req));
+}
+
+// Purga periódica para que el Map no crezca sin límite
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [clave, registro] of intentosLogin) {
+    if (registro.expira <= ahora) intentosLogin.delete(clave);
+  }
+}, VENTANA_LOGIN_MS).unref();
+
 // GET /login
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
@@ -38,6 +100,9 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.render('login', { error: 'Por favor ingresa usuario y contraseña.' });
+
+  if (bloqueadoPorIntentos(req))
+    return res.render('login', { error: 'Demasiados intentos fallidos. Espera unos minutos.' });
 
   try {
     // 1. Buscar en usuarios internos (empleados)
@@ -69,8 +134,10 @@ router.post('/login', async (req, res) => {
         passwordOk = r.rows[0]?.ok;
       }
 
-      if (!passwordOk)
+      if (!passwordOk) {
+        registrarFallo(req);
         return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+      }
 
       // Si es su primer acceso, exigir cambio de contraseña antes de entrar
       if (!usuario.primer_acceso) {
@@ -83,13 +150,13 @@ router.post('/login', async (req, res) => {
         return res.render('login', { error: null, cambioPassword: true, passwordError: null });
       }
 
-      req.session.user = {
+      limpiarIntentos(req);
+      return iniciarSesion(req, res, 'user', {
         id:              usuario.id,
         username:        usuario.username,
         rol:             usuario.rol,
         nombre_completo: `${usuario.nombre} ${usuario.apellido_paterno} ${usuario.apellido_materno || ''}`.trim(),
-      };
-      return res.redirect('/dashboard');
+      }, '/dashboard');
     }
 
     // 2. Buscar en proveedores (contratistas)
@@ -101,8 +168,10 @@ router.post('/login', async (req, res) => {
       [username.toLowerCase().trim()]
     );
 
-    if (!resultProv.rows.length)
+    if (!resultProv.rows.length) {
+      registrarFallo(req);
       return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+    }
 
     const proveedor = resultProv.rows[0];
 
@@ -112,16 +181,18 @@ router.post('/login', async (req, res) => {
       [password, proveedor.id_proveedor]
     );
 
-    if (!rPwd.rows[0]?.ok)
+    if (!rPwd.rows[0]?.ok) {
+      registrarFallo(req);
       return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+    }
 
-    req.session.user = {
+    limpiarIntentos(req);
+    return iniciarSesion(req, res, 'user', {
       id:              proveedor.id_proveedor,
       username:        proveedor.username,
       rol:             'contratista',
       nombre_completo: proveedor.nombre,
-    };
-    return res.redirect('/dashboard');
+    }, '/dashboard');
 
   } catch(e) {
     console.error('Error login:', e);
@@ -157,15 +228,15 @@ router.post('/cambiar-password', async (req, res) => {
       [hash, pendiente.id]
     );
 
-    // Contraseña actualizada: iniciar sesión normalmente
-    req.session.user = {
+    // Contraseña actualizada: iniciar sesión normalmente.
+    // `pendiente` ya está en una variable local, así que regenerar la sesión
+    // (que borra cambioPasswordPendiente) no pierde nada.
+    return iniciarSesion(req, res, 'user', {
       id:              pendiente.id,
       username:        pendiente.username,
       rol:             pendiente.rol,
       nombre_completo: pendiente.nombre_completo,
-    };
-    delete req.session.cambioPasswordPendiente;
-    return res.redirect('/dashboard');
+    }, '/dashboard');
 
   } catch(e) {
     console.error('Error cambiando contraseña:', e);
@@ -175,8 +246,13 @@ router.post('/cambiar-password', async (req, res) => {
 
 // GET /logout
 router.get('/logout', (req, res) => {
-  req.session.destroy();
-  res.redirect('/login');
+  // El redirect va dentro del callback: sin él la respuesta puede salir antes
+  // de que el store haya borrado la sesión.
+  req.session.destroy(err => {
+    if (err) console.error('[logout] error cerrando sesión:', err);
+    res.clearCookie('connect.sid');
+    res.redirect('/login');
+  });
 });
 
 // ─── MÓDULO ASISTENCIA ─────────────────────────────────
@@ -185,12 +261,21 @@ router.get('/logout', (req, res) => {
 // Si no están configuradas, el login queda deshabilitado (no hay usuario por defecto).
 const ASISTENCIA_USERNAME = process.env.ASISTENCIA_USERNAME;
 const ASISTENCIA_PASSWORD = process.env.ASISTENCIA_PASSWORD;
+const ASISTENCIA_CONFIGURADA = !!(ASISTENCIA_USERNAME && ASISTENCIA_PASSWORD);
 
-// Comparación en tiempo constante: evita filtrar el valor midiendo cuánto tarda
+// Se avisa una sola vez al cargar el módulo, no en cada intento: si no, cualquiera
+// puede inflar el log a voluntad golpeando el endpoint.
+if (!ASISTENCIA_CONFIGURADA) {
+  console.error('[asistencia] Falta ASISTENCIA_USERNAME o ASISTENCIA_PASSWORD en .env: login deshabilitado.');
+}
+
+// Comparación en tiempo constante: evita filtrar el valor midiendo cuánto tarda.
+// Se hashea antes de comparar porque sha256 siempre da 32 bytes: así timingSafeEqual
+// nunca ve longitudes distintas y no se filtra ni siquiera el largo del secreto
+// (comparar los buffers crudos obliga a un `return false` temprano cuando no coinciden).
 function comparaSeguro(recibido, esperado) {
-  const a = Buffer.from(String(recibido ?? ''), 'utf8');
-  const b = Buffer.from(String(esperado ?? ''), 'utf8');
-  if (a.length !== b.length) return false;
+  const a = crypto.createHash('sha256').update(String(recibido ?? ''), 'utf8').digest();
+  const b = crypto.createHash('sha256').update(String(esperado ?? ''), 'utf8').digest();
   return crypto.timingSafeEqual(a, b);
 }
 
@@ -202,29 +287,39 @@ router.get('/login-asistencia', (req, res) => {
 router.post('/login-asistencia', (req, res) => {
   const { username, password } = req.body;
 
-  if (!ASISTENCIA_USERNAME || !ASISTENCIA_PASSWORD) {
-    console.error('[asistencia] Falta ASISTENCIA_USERNAME o ASISTENCIA_PASSWORD en .env: login deshabilitado.');
+  if (!ASISTENCIA_CONFIGURADA)
     return res.render('login-asistencia', { error: 'Módulo no configurado. Contacta al administrador.' });
-  }
 
-  // Se evalúan ambas antes de decidir, para no cortocircuitar y delatar cuál falló
+  if (bloqueadoPorIntentos(req))
+    return res.render('login-asistencia', { error: 'Demasiados intentos fallidos. Espera unos minutos.' });
+
+  // Se evalúan ambas siempre, aunque la primera ya haya fallado: así el tiempo
+  // de respuesta no delata si lo que estaba mal era el usuario o la contraseña
   const okUsuario = comparaSeguro(username, ASISTENCIA_USERNAME);
   const okPassword = comparaSeguro(password, ASISTENCIA_PASSWORD);
 
   if (okUsuario && okPassword) {
-    req.session.asistencia_user = {
+    limpiarIntentos(req);
+    return iniciarSesion(req, res, 'asistencia_user', {
       id: 0, username: ASISTENCIA_USERNAME,
       rol: 'seguridad_fisica',
       nombre_completo: 'Administrador',
-    };
-    return res.redirect('/verificar');
+    }, '/verificar', 'login-asistencia');
   }
+
+  registrarFallo(req);
   return res.render('login-asistencia', { error: 'Usuario o contraseña incorrectos.' });
 });
 
 router.get('/logout-asistencia', (req, res) => {
-  req.session.asistencia_user = null;
-  res.redirect('/login');
+  // destroy() en vez de `= null`: el equipo de la caseta es compartido, así que
+  // el ID de sesión no puede sobrevivir al logout para que el siguiente turno
+  // (o alguien con la cookie anotada) lo reutilice.
+  req.session.destroy(err => {
+    if (err) console.error('[asistencia] error cerrando sesión:', err);
+    res.clearCookie('connect.sid');
+    res.redirect('/login');
+  });
 });
 
 

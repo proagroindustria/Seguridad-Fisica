@@ -25,21 +25,49 @@ app.use('/models', express.static(path.join(__dirname, 'public', 'models')));
 
 // Sin SESSION_SECRET la app no arranca: antes caía a un valor por defecto que
 // está en el código fuente, así que un .env que no cargara pasaba desapercibido.
+// process.exit en vez de throw: en los logs de pm2 se lee el motivo, no un stack.
 if (!process.env.SESSION_SECRET) {
-  throw new Error('Falta SESSION_SECRET en el .env. La app no arranca sin él.');
+  console.error('✖ Falta SESSION_SECRET en el .env. La app no arranca sin él.');
+  process.exit(1);
 }
 
-// Detrás de nginx: necesario para que Express detecte HTTPS y mande la cookie secure
-app.set('trust proxy', 1);
+const EN_PRODUCCION = process.env.NODE_ENV === 'production';
+
+// Default seguro: en producción la cookie va con Secure salvo que se apague a
+// propósito con COOKIE_SECURE=false. Antes, olvidar la variable la dejaba
+// viajando sin el flag y nadie se enteraba. En local el default sigue siendo
+// false, porque con Secure el navegador no manda la cookie por http://localhost.
+const COOKIE_SECURE = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === 'true'
+  : EN_PRODUCCION;
+
+if (EN_PRODUCCION && !COOKIE_SECURE) {
+  console.warn('⚠ COOKIE_SECURE=false en producción: la cookie de sesión viajará sin flag Secure.');
+}
+
+// Solo detrás de nginx: hace que Express detecte HTTPS y mande la cookie secure.
+// Condicionado a propósito: activarlo sin proxy delante haría que Express creyera
+// el X-Forwarded-For que mande cualquier cliente, y esa IP se guarda como firma
+// del permiso en routes/permisos.js.
+if (COOKIE_SECURE) {
+  app.set('trust proxy', 1);
+}
+
+// Sesión de 12 h con `rolling`: se renueva en cada request, así que solo cierra
+// por inactividad real. Antes no tenía maxAge y en la caseta, donde el navegador
+// no se cierra nunca, la sesión duraba indefinidamente.
+const HORAS_SESION = parseInt(process.env.SESSION_HORAS || '12', 10);
 
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  rolling: true,
   cookie: {
-    httpOnly: true,                                 // no accesible desde JS
-    sameSite: 'lax',                                // mitiga CSRF
-    secure: process.env.COOKIE_SECURE === 'true',   // true solo si sirves por HTTPS
+    httpOnly: true,                          // no accesible desde JS
+    sameSite: 'lax',                         // mitiga CSRF
+    secure: COOKIE_SECURE,                   // Secure por defecto en producción
+    maxAge: HORAS_SESION * 60 * 60 * 1000,
   }
 }));
 

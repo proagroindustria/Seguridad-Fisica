@@ -432,7 +432,7 @@ router.get('/lote/:lote_id/pdf', requireAuth, async (req, res) => {
 // GET /
 // =====================================================
 router.get('/', requireAuth, (req, res) => {
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (process.env.OFFLINE_MODE === 'true') {
     const hoy = new Date(); hoy.setHours(0,0,0,0);
     solicitudesMemoria.forEach(p => { if (p.estado==='activo' && new Date(p.fecha_fin)<hoy) p.estado='vencido'; });
     return res.json({ success: true, data: solicitudesMemoria });
@@ -480,7 +480,7 @@ router.post('/', requireAuth, async (req, res) => {
   if (fiSoloFecha < hoySoloFecha) return res.status(400).json({ success: false, error: 'La fecha de inicio no puede ser anterior a hoy.' });
   if (ff < fi) return res.status(400).json({ success: false, error: 'La fecha fin no puede ser anterior al inicio.' });
   if (Math.ceil((ff-fi)/(1000*60*60*24)) > 30) return res.status(400).json({ success: false, error: 'El período no puede exceder 30 días.' });
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (process.env.OFFLINE_MODE === 'true') {
     const nuevo = { id: solicitudesMemoria.length+1, folio: generarFolioOffline(), empresa: empresa.trim(), contrato: contrato.trim(), responsable_contrato: responsable_contrato||'—', responsable1: responsable1||null, responsable2: responsable2||null, fecha_inicio, fecha_fin, estado:'en_espera_area', creado_por: user.id, creado_en: new Date().toISOString() };
     solicitudesMemoria.unshift(nuevo); return res.json({ success: true, data: nuevo });
   }
@@ -579,7 +579,7 @@ await pool.query(`INSERT INTO permiso_vehiculos (permiso_id, marca, modelo, plac
 // PUT /:id/aprobar
 router.put('/:id/aprobar', requireAuth, async (req, res) => {
   const user = req.session.user; const id = parseInt(req.params.id);
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (process.env.OFFLINE_MODE === 'true') {
     const p = solicitudesMemoria.find(x=>x.id===id);
     if (!p) return res.status(404).json({ success:false, error:'No encontrado.' });
     if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success:false, error:`No puedes aprobar en estado "${ESTADO_LABEL[p.estado]}".` });
@@ -619,7 +619,7 @@ router.put('/:id/aprobar', requireAuth, async (req, res) => {
 // PUT /:id/rechazar
 router.put('/:id/rechazar', requireAuth, async (req, res) => {
   const user = req.session.user; const id = parseInt(req.params.id);
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (process.env.OFFLINE_MODE === 'true') {
     const p = solicitudesMemoria.find(x=>x.id===id);
     if (!p) return res.status(404).json({ success:false, error:'No encontrado.' });
     if (!puedeAprobar(user.rol, p.estado)) return res.status(403).json({ success:false, error:`No puedes rechazar en estado "${ESTADO_LABEL[p.estado]}".` });
@@ -650,7 +650,7 @@ router.put('/:id/rechazar', requireAuth, async (req, res) => {
 // GET /:id/historial
 router.get('/:id/historial', requireAuth, (req, res) => {
   const id = parseInt(req.params.id);
-  if (process.env.OFFLINE_MODE !== 'false') return res.json({ success:true, data:[] });
+  if (process.env.OFFLINE_MODE === 'true') return res.json({ success:true, data:[] });
   pool.query(`SELECT h.*, u.nombre_completo AS usuario_nombre FROM permiso_historial h LEFT JOIN usuarios u ON h.cambiado_por=u.id WHERE h.permiso_id=$1 ORDER BY h.creado_en ASC`, [id])
     .then(r=>res.json({ success:true, data:r.rows })).catch(e=>res.status(500).json({ success:false, error:e.message }));
 });
@@ -659,7 +659,7 @@ router.get('/:id/historial', requireAuth, (req, res) => {
 // GET /:id/lotes
 router.get('/:id/lotes', requireAuth, async (req, res) => {
   const solicitud_id = parseInt(req.params.id);
-  if (process.env.OFFLINE_MODE !== 'false') return res.json({ success:true, data:(global.lotesMemoria||[]).filter(x=>x.solicitud_id===solicitud_id) });
+  if (process.env.OFFLINE_MODE === 'true') return res.json({ success:true, data:(global.lotesMemoria||[]).filter(x=>x.solicitud_id===solicitud_id) });
   try {
     const rL = await pool.query(
       `SELECT bl.*
@@ -768,7 +768,7 @@ router.get('/proximas-a-vencer', requireAuth, async (req, res) => {
 // GET /:id — detalle completo
 router.get('/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
-  if (process.env.OFFLINE_MODE !== 'false') {
+  if (process.env.OFFLINE_MODE === 'true') {
     const p = solicitudesMemoria.find(x=>x.id===id);
     if (!p) return res.status(404).json({ success:false, error:'No encontrado.' });
     return res.json({ success:true, data:{ solicitud:p, personal:[], vehiculos:[], equipos:[] } });
@@ -838,7 +838,7 @@ router.post('/:id/salida', requireAuth, async (req, res) => {
   if (user.rol!=='seguridad_fisica') return res.status(403).json({ success:false, error:'Solo Seguridad Física puede registrar salidas.' });
   const solicitud_id = parseInt(req.params.id); const { tipo_item, item_id, cantidad, observaciones } = req.body;
   if (!tipo_item||!item_id) return res.status(400).json({ success:false, error:'Datos incompletos.' });
-  if (process.env.OFFLINE_MODE !== 'false') { if (!global.bitacoraMemoria) global.bitacoraMemoria=[]; const reg={id:global.bitacoraMemoria.length+1, permiso_id:solicitud_id, tipo_item, item_id:parseInt(item_id), cantidad:parseInt(cantidad)||1, observaciones:observaciones||null, registrado_por_username:user.username, registrado_en:new Date().toISOString()}; global.bitacoraMemoria.push(reg); return res.json({ success:true, data:reg }); }
+  if (process.env.OFFLINE_MODE === 'true') { if (!global.bitacoraMemoria) global.bitacoraMemoria=[]; const reg={id:global.bitacoraMemoria.length+1, permiso_id:solicitud_id, tipo_item, item_id:parseInt(item_id), cantidad:parseInt(cantidad)||1, observaciones:observaciones||null, registrado_por_username:user.username, registrado_en:new Date().toISOString()}; global.bitacoraMemoria.push(reg); return res.json({ success:true, data:reg }); }
   try {
     const rP=await pool.query('SELECT estado FROM permisos WHERE id=$1',[solicitud_id]); if (!rP.rows.length) return res.status(404).json({ success:false, error:'No encontrado.' }); if (rP.rows[0].estado!=='activo') return res.status(400).json({ success:false, error:'Solo se pueden registrar salidas en solicitudes activos.' });
     if (tipo_item==='equipo') { const rEq=await pool.query('SELECT cantidad FROM permiso_equipos WHERE id=$1 AND permiso_id=$2',[item_id,solicitud_id]); if (!rEq.rows.length) return res.status(404).json({ success:false, error:'Equipo no encontrado.' }); const rSalidas=await pool.query('SELECT COALESCE(SUM(cantidad),0) AS total FROM bitacora_salidas WHERE item_id=$1 AND tipo_item=$2',[item_id,'equipo']); const yaRegistrado=parseInt(rSalidas.rows[0].total); const cantMax=rEq.rows[0].cantidad; const cantPedir=parseInt(cantidad)||1; if (yaRegistrado+cantPedir>cantMax) return res.status(400).json({ success:false, error:`Solo quedan ${cantMax-yaRegistrado} unidades disponibles.` }); }
@@ -854,7 +854,7 @@ router.post('/:id/lote', requireAuth, async (req, res) => {
   const solicitud_id = parseInt(req.params.id); const { items, observaciones, responsable_nombre } = req.body;
   if (!items||!Array.isArray(items)||items.length===0) return res.status(400).json({ success:false, error:'No hay items en el lote.' });
   if (!responsable_nombre||!responsable_nombre.trim()) return res.status(400).json({ success:false, error:'Debes seleccionar un responsable del retiro.' });
-  if (process.env.OFFLINE_MODE !== 'false') { if (!global.lotesMemoria) global.lotesMemoria=[]; const lote={id:global.lotesMemoria.length+1, folio:`RET-${new Date().getFullYear()}-${String(global.lotesMemoria.length+1).padStart(4,'0')}`, solicitud_id, observaciones:observaciones||null, responsable_nombre:responsable_nombre.trim(), estado:'pendiente', registrado_por_username:user.username, registrado_en:new Date().toISOString(), items}; global.lotesMemoria.push(lote); return res.json({ success:true, data:lote }); }
+  if (process.env.OFFLINE_MODE === 'true') { if (!global.lotesMemoria) global.lotesMemoria=[]; const lote={id:global.lotesMemoria.length+1, folio:`RET-${new Date().getFullYear()}-${String(global.lotesMemoria.length+1).padStart(4,'0')}`, solicitud_id, observaciones:observaciones||null, responsable_nombre:responsable_nombre.trim(), estado:'pendiente', registrado_por_username:user.username, registrado_en:new Date().toISOString(), items}; global.lotesMemoria.push(lote); return res.json({ success:true, data:lote }); }
   try {
     const rP=await pool.query('SELECT estado FROM permisos WHERE id=$1',[solicitud_id]); if (!rP.rows.length) return res.status(404).json({ success:false, error:'Solicitud no encontrada.' }); if (rP.rows[0].estado!=='activo') return res.status(400).json({ success:false, error:'Solo se pueden registrar salidas en solicitudes activos.' });
     for (const item of items) {
