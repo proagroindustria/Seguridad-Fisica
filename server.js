@@ -425,7 +425,9 @@ async function vencerPermisosExpirados() {
             continue;
           }
 
-          // Permiso normal: liberar solo si no tiene otro permiso activo
+          // Permiso normal: liberar solo si no tiene otro permiso activo o en trámite.
+          // Un permiso en aprobación (renovación ya capturada) protege al trabajador:
+          // borrarlo obligaría a re-enrolar rostro y documentos al autorizarse.
           for (const t of tRes.rows) {
             if (!t.nombre) continue;
 
@@ -433,7 +435,8 @@ async function vencerPermisosExpirados() {
               `SELECT COUNT(*) AS cnt FROM permiso_personal pp
                JOIN permisos p ON p.id = pp.permiso_id
                WHERE LOWER(TRIM(pp.nombre)) = LOWER(TRIM($1))
-                 AND p.estado = 'activo'
+                 AND p.estado IN ('en_espera_area','aprobado_area','en_espera_seguridad','activo')
+                 AND p.fecha_fin >= CURRENT_DATE
                  AND pp.permiso_id != $2`,
               [t.nombre, permiso.id]
             );

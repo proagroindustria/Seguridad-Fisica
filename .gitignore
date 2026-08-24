@@ -4,6 +4,7 @@ node_modules/
 # Archivos sensibles
 .env
 .env.*
+*.env
 
 # Modelos pesados (opcional)
 public/models/

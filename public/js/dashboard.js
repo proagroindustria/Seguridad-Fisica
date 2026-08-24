@@ -1545,30 +1545,61 @@ async function onFileChange(tipo, rowId, fieldId, input) {
 // no engordar la fila en la BD, no para esquivar el límite de nginx.
 const COMPRESION_LIGERA = { max: 1280, calidad: 0.75 };
 
+// Decodifica el archivo elegido desde la galería/explorador o tomado con la cámara.
+// Antes se hacía con FileReader.readAsDataURL + <img>: en móvil eso convierte una
+// foto de 12 MP en una cadena base64 de decenas de MB antes siquiera de decodificar,
+// y en gama media el navegador se queda sin memoria y dispara img.onerror. El error
+// salía siempre como "formato no compatible", aunque el JPG fuera perfectamente válido.
+// Por eso ahora se intenta primero createImageBitmap (decodifica el blob directo, sin
+// base64 intermedio, y respeta la orientación EXIF) y solo se recurre a <img> —con
+// object URL, no data URL— si el navegador no lo soporta.
+async function decodificarImagen(file) {
+  if (typeof createImageBitmap === 'function') {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch (e) { /* Safari viejo no acepta las opciones: reintentar sin ellas */ }
+    try { return await createImageBitmap(file); }
+    catch (e) { /* formato que el navegador no sabe decodificar: seguir al fallback */ }
+  }
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      const tipo = file.type || (file.name.split('.').pop() || '').toLowerCase() || 'desconocido';
+      reject(new Error(
+        `este navegador no puede leer la imagen (${tipo}, ${(file.size/1024/1024).toFixed(1)} MB). ` +
+        'Si es una foto de iPhone: Ajustes → Cámara → Formatos → "Más compatible", ' +
+        'o usa el botón 📷 para tomarla dentro de la app'
+      ));
+    };
+    img.src = url;
+  });
+}
+
 async function comprimirImagenVehiculo(file, opciones) {
   const MAX     = opciones?.max     || 1800;
   const CALIDAD = opciones?.calidad || 0.88;
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Formato de imagen no compatible (probablemente HEIC de iPhone). Activa Ajustes → Cámara → Formatos → "Más compatible", o sube la foto como JPG/PNG'));
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-          else       { w = Math.round(w * MAX / h); h = MAX; }
-        }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', CALIDAD).split(',')[1]);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
+
+  const img = await decodificarImagen(file);
+  let w = img.width, h = img.height;
+  if (!w || !h) throw new Error('la imagen llegó vacía o corrupta');
+
+  if (w > MAX || h > MAX) {
+    if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+    else       { w = Math.round(w * MAX / h); h = MAX; }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+  // Liberar el bitmap en cuanto está dibujado: en móvil la memoria es el cuello de botella.
+  if (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) img.close();
+
+  const base64 = canvas.toDataURL('image/jpeg', CALIDAD).split(',')[1];
+  if (!base64) throw new Error('no se pudo generar el JPG comprimido');
+  return base64;
 }
 
 
@@ -1903,7 +1934,7 @@ function renderPagina() {
 
 function renderPaginador(total) {
   // Eliminar paginador anterior si existe
-  let prev = document.getElementById('tablePaginador');
+  const prev = document.getElementById('tablePaginador');
   if (prev) prev.remove();
 
   if (total === 0) return;
@@ -1914,56 +1945,58 @@ function renderPaginador(total) {
 
   const div = document.createElement('div');
   div.id = 'tablePaginador';
-  div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);font-family:"Barlow",sans-serif;font-size:13px;color:var(--text-3);flex-wrap:wrap;gap:8px';
+  div.className = 'table-pagination';
 
   // Info de registros
-  const info = document.createElement('span');
+  const info = document.createElement('div');
+  info.className = 'pag-info';
   info.textContent = `Mostrando ${inicio}–${fin} de ${total} registros`;
   div.appendChild(info);
 
   // Botones de página
   const btns = document.createElement('div');
-  btns.style.cssText = 'display:flex;gap:4px;align-items:center';
+  btns.className = 'pag-controls';
 
-  const btnStyle = (activo) => `padding:4px 10px;border:1px solid var(--border);background:${activo ? 'var(--accent)' : 'var(--bg-2)'};color:${activo ? '#000' : 'var(--text-2)'};font-family:"Share Tech Mono",monospace;font-size:12px;cursor:pointer;font-weight:${activo?'700':'400'}`;
+  const mkBtn = (texto, { activo = false, disabled = false, onClick } = {}) => {
+    const b = document.createElement('button');
+    b.className = 'pag-btn' + (activo ? ' active' : '');
+    b.textContent = texto;
+    b.disabled = disabled;
+    if (onClick) b.onclick = onClick;
+    return b;
+  };
 
   // Anterior
-  const btnPrev = document.createElement('button');
-  btnPrev.textContent = '←';
-  btnPrev.style.cssText = btnStyle(false);
-  btnPrev.disabled = paginaActual === 1;
-  btnPrev.style.opacity = paginaActual === 1 ? '0.4' : '1';
-  btnPrev.onclick = () => { paginaActual--; renderPagina(); };
-  btns.appendChild(btnPrev);
+  btns.appendChild(mkBtn('←', {
+    disabled: paginaActual === 1,
+    onClick: () => { paginaActual--; renderPagina(); }
+  }));
 
   // Páginas numeradas (máx 5 visibles)
   let startP = Math.max(1, paginaActual - 2);
-  let endP   = Math.min(totalPaginas, startP + 4);
+  const endP = Math.min(totalPaginas, startP + 4);
   if (endP - startP < 4) startP = Math.max(1, endP - 4);
 
   for (let i = startP; i <= endP; i++) {
-    const btn = document.createElement('button');
-    btn.textContent = i;
-    btn.style.cssText = btnStyle(i === paginaActual);
     const pg = i;
-    btn.onclick = () => { paginaActual = pg; renderPagina(); };
-    btns.appendChild(btn);
+    btns.appendChild(mkBtn(String(i), {
+      activo: i === paginaActual,
+      onClick: () => { paginaActual = pg; renderPagina(); }
+    }));
   }
 
   // Siguiente
-  const btnNext = document.createElement('button');
-  btnNext.textContent = '→';
-  btnNext.style.cssText = btnStyle(false);
-  btnNext.disabled = paginaActual === totalPaginas;
-  btnNext.style.opacity = paginaActual === totalPaginas ? '0.4' : '1';
-  btnNext.onclick = () => { paginaActual++; renderPagina(); };
-  btns.appendChild(btnNext);
+  btns.appendChild(mkBtn('→', {
+    disabled: paginaActual === totalPaginas,
+    onClick: () => { paginaActual++; renderPagina(); }
+  }));
 
   div.appendChild(btns);
 
-  // Insertar después de la tabla
+  // Insertar como pie del contenedor, fuera del área de scroll horizontal
   const table = document.getElementById('dataTable');
-  table.parentNode.insertBefore(div, table.nextSibling);
+  const cont  = table.closest('.table-container') || table.parentNode;
+  cont.appendChild(div);
 }
 
 
@@ -1983,7 +2016,7 @@ function aplicarFiltros() {
   const s = (document.getElementById('searchInput').value||'').toLowerCase();
   let f = todosSolicitudes;
   if (filtroActual !== 'todos') f = f.filter(p=>p.estado===filtroActual);
-  if (s) f = f.filter(p=>p.empresa.toLowerCase().includes(s)||p.contrato.toLowerCase().includes(s)||p.folio.toLowerCase().includes(s));
+  if (s) f = f.filter(p => [p.folio, p.empresa, p.contrato].some(v => String(v ?? '').toLowerCase().includes(s)));
   solicitudesFiltradas = f;
 paginaActual = 1;
 renderPagina();

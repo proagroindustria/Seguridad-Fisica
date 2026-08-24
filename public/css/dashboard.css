@@ -336,6 +336,24 @@ html, body {
 .table-container::-webkit-scrollbar-thumb { background: var(--text-3); border: 2px solid var(--bg-3); }
 .table-container::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
+/* Contenedor apilado: el scroll horizontal vive en .table-scroll, de modo que
+   el pie de paginación no se arrastra ni se recorta con la tabla ancha */
+.table-container.table-stack {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+/* La barra horizontal se dibuja DENTRO del padding box y, con overflow-y:hidden
+   sobre una caja de altura automatica, recorta justo su propio grosor (12px).
+   El padding-bottom absorbe ese recorte para que no se coma la ultima fila.
+   flex:0 0 auto evita que flex-basis:0% de la regla base colapse el alto. */
+.table-container.table-stack > .table-scroll {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+}
+
 /* Contenedor que ocupa el alto disponible: la tabla scrollea dentro,
    el pie de paginación queda siempre visible */
 .table-container.table-fill {
