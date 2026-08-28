@@ -29,64 +29,188 @@ const poolBDPrincipal = new Pool({
 // Regenera el ID de sesión antes de autenticar. Sin esto, quien logre fijar una
 // cookie en el navegador de la víctima conserva ese mismo ID después del login y
 // hereda la sesión ya autenticada (session fixation).
-function iniciarSesion(req, res, clave, datos, destino, vistaError = 'login') {
+const ERROR_SERVIDOR = 'Error del servidor. Intenta de nuevo.';
+
+function regenerarSesion(req) {
   return new Promise(resolve => {
-    const fallar = (err, contexto) => {
-      console.error(`[login] ${contexto}:`, err);
-      res.render(vistaError, { error: 'Error del servidor. Intenta de nuevo.' });
-      resolve();
-    };
     req.session.regenerate(err => {
-      if (err) return fallar(err, 'no se pudo regenerar la sesión');
-      req.session[clave] = datos;
-      // save() explícito: el redirect no debe salir antes de persistir la sesión
-      req.session.save(err2 => {
-        if (err2) return fallar(err2, 'no se pudo guardar la sesión');
-        res.redirect(destino);
-        resolve();
-      });
+      if (err) console.error('[sesion] no se pudo regenerar la sesión:', err);
+      resolve(!err);
     });
   });
 }
 
-// Limitador de intentos por IP+usuario, en memoria (sin dependencias nuevas).
-// No sustituye a un WAF, pero corta el fuerza bruta contra contraseñas compartidas.
-const MAX_INTENTOS_LOGIN = 8;
-const VENTANA_LOGIN_MS   = 10 * 60 * 1000;
-const intentosLogin      = new Map();
-
-function claveIntento(req) {
-  const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-             || req.socket.remoteAddress || 'desconocida';
-  return `${ip}|${String(req.body?.username ?? '').toLowerCase().trim()}`;
-}
-
-function bloqueadoPorIntentos(req) {
-  const registro = intentosLogin.get(claveIntento(req));
-  return !!registro && registro.expira > Date.now() && registro.n >= MAX_INTENTOS_LOGIN;
-}
-
-function registrarFallo(req) {
-  const clave = claveIntento(req);
-  const previo = intentosLogin.get(clave);
-  const vigente = previo && previo.expira > Date.now();
-  intentosLogin.set(clave, {
-    n: vigente ? previo.n + 1 : 1,
-    expira: vigente ? previo.expira : Date.now() + VENTANA_LOGIN_MS,
+// save() explícito: la respuesta no debe salir antes de persistir la sesión
+function guardarSesion(req) {
+  return new Promise(resolve => {
+    req.session.save(err => {
+      if (err) console.error('[sesion] no se pudo guardar la sesión:', err);
+      resolve(!err);
+    });
   });
 }
 
-function limpiarIntentos(req) {
-  intentosLogin.delete(claveIntento(req));
+async function iniciarSesion(req, res, clave, datos, destino, vistaError = 'login') {
+  if (!(await regenerarSesion(req)))
+    return res.render(vistaError, { error: ERROR_SERVIDOR });
+  req.session[clave] = datos;
+  if (!(await guardarSesion(req)))
+    return res.render(vistaError, { error: ERROR_SERVIDOR });
+  return res.redirect(destino);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Limitador de intentos en memoria (sin dependencias nuevas).
+// No sustituye a un WAF, pero corta la fuerza bruta contra el login.
+//
+// Se cuenta por DOS claves a la vez:
+//   - ip:<ip>      → frena a un atacante que prueba muchos usuarios desde un host
+//   - user:<login> → frena el credential stuffing distribuido (muchas IPs, una cuenta)
+// Basta con que una de las dos supere su umbral para bloquear.
+//
+// El bloqueo escala: cada vez que una clave vuelve a agotar sus intentos, el
+// castigo siguiente es más largo. Así un ataque lento tampoco sale gratis.
+const VENTANA_INTENTOS_MS = 15 * 60 * 1000;  // ventana en la que se acumulan fallos
+const ESCALADA_MS = [2, 5, 10, 20, 30].map(m => m * 60 * 1000);
+
+// Umbral alto para la IP a propósito: en planta todos los empleados salen por la
+// misma IP pública (NAT), así que un umbral bajo dejaría fuera a la caseta entera
+// por unos cuantos dedazos. La defensa fina es el contador por usuario, que no se
+// ve afectado por el NAT; el de IP es solo el freno contra un host que rocía
+// muchos usuarios distintos.
+const MAX_INTENTOS_IP     = 20;
+const MAX_INTENTOS_USER   = 8;
+const MAX_INTENTOS_CODIGO = 5;               // código de verificación de registro
+const MAX_ENVIOS_CODIGO   = 5;               // reenvíos de código por IP
+
+// Tope del castigo por tipo de clave. El de usuario se queda corto adrede: como
+// cualquiera puede fallar el login de una cuenta ajena a propósito, una escalada
+// larga aquí sería un modo fácil de dejar a alguien fuera del sistema. 10 min
+// siguen limitando un ataque distribuido a ~50 intentos/hora contra esa cuenta.
+const TOPE_BLOQUEO_USER   = 10 * 60 * 1000;
+const TOPE_BLOQUEO_IP     = 30 * 60 * 1000;
+const TOPE_BLOQUEO_CODIGO = 30 * 60 * 1000;
+
+// clave -> { n, expira, castigos, bloqueadoHasta }
+const intentos = new Map();
+
+// req.ip respeta `trust proxy` (server.js). A diferencia de leer
+// req.headers['x-real-ip'] a mano, un cliente NO puede falsear esto: cuando
+// trust proxy está activo Express descarta lo que el cliente antepuso en
+// X-Forwarded-For y se queda con lo que añadió nginx; cuando está inactivo usa
+// la IP del socket. Leer la cabecera cruda permitía rotarla en cada request y
+// saltarse el limitador por completo.
+let avisoProxyEmitido = false;
+function ipCliente(req) {
+  if (!avisoProxyEmitido && !req.app.get('trust proxy') && req.headers['x-forwarded-for']) {
+    avisoProxyEmitido = true;
+    console.warn('[seguridad] Llegan cabeceras X-Forwarded-For pero `trust proxy` está desactivado: ' +
+                 'todas las peticiones se contarán bajo la IP del proxy y el limitador bloqueará a todos a la vez. ' +
+                 'Activa COOKIE_SECURE=true si hay nginx delante.');
+  }
+  return req.ip || req.socket.remoteAddress || 'desconocida';
+}
+
+// Devuelve los ms que faltan para poder reintentar (0 si no está bloqueada).
+function msBloqueo(clave) {
+  const r = intentos.get(clave);
+  if (!r || !r.bloqueadoHasta) return 0;
+  const restante = r.bloqueadoHasta - Date.now();
+  return restante > 0 ? restante : 0;
+}
+
+// Suma un fallo a la clave y aplica el bloqueo si alcanzó el máximo.
+function sumarFallo(clave, max, tope) {
+  const ahora = Date.now();
+  const previo = intentos.get(clave);
+  const vigente = previo && previo.expira > ahora;
+  const r = vigente ? previo : { n: 0, castigos: 0, bloqueadoHasta: 0 };
+
+  r.n += 1;
+  r.expira = ahora + VENTANA_INTENTOS_MS;
+
+  if (r.n >= max) {
+    const castigo = Math.min(ESCALADA_MS[Math.min(r.castigos, ESCALADA_MS.length - 1)], tope);
+    r.bloqueadoHasta = ahora + castigo;
+    r.castigos += 1;
+    r.n = 0;                                   // reinicia el conteo tras castigar
+    r.expira = r.bloqueadoHasta + VENTANA_INTENTOS_MS; // recuerda la reincidencia
+  }
+  intentos.set(clave, r);
+}
+
+function clavesLogin(req, username) {
+  const claves = [{ clave: `ip:${ipCliente(req)}`, max: MAX_INTENTOS_IP, tope: TOPE_BLOQUEO_IP }];
+  const u = String(username || '').toLowerCase().trim();
+  if (u) claves.push({ clave: `user:${u}`, max: MAX_INTENTOS_USER, tope: TOPE_BLOQUEO_USER });
+  return claves;
+}
+
+// Mensaje listo para la vista, o null si puede intentar.
+function mensajeBloqueo(req, username) {
+  const espera = Math.max(...clavesLogin(req, username).map(({ clave }) => msBloqueo(clave)));
+  if (espera <= 0) return null;
+  const minutos = Math.ceil(espera / 60000);
+  return `Demasiados intentos fallidos. Espera ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'} e intenta de nuevo.`;
+}
+
+function registrarFallo(req, username, etiqueta = 'login') {
+  for (const { clave, max, tope } of clavesLogin(req, username)) sumarFallo(clave, max, tope);
+  // Sin esta traza no hay forma de enterarse de que un ataque está en curso.
+  console.warn(`[seguridad] intento fallido ${etiqueta} ip=${ipCliente(req)} usuario=${String(username || '').slice(0, 60)}`);
+}
+
+// Solo se borra la clave del usuario que acaba de autenticarse. Si también se
+// borrara la de la IP, bastaría con tener una cuenta propia válida para
+// reiniciar el contador entre ráfagas y dejar el límite por IP en nada.
+function limpiarIntentos(req, username) {
+  const u = String(username || '').toLowerCase().trim();
+  if (u) intentos.delete(`user:${u}`);
+}
+
+// Limitador genérico por IP para endpoints que no son login (código de registro).
+function bloqueoPorIp(req, sufijo) {
+  return msBloqueo(`${sufijo}:${ipCliente(req)}`);
+}
+function falloPorIp(req, sufijo, max) {
+  sumarFallo(`${sufijo}:${ipCliente(req)}`, max, TOPE_BLOQUEO_CODIGO);
 }
 
 // Purga periódica para que el Map no crezca sin límite
 setInterval(() => {
   const ahora = Date.now();
-  for (const [clave, registro] of intentosLogin) {
-    if (registro.expira <= ahora) intentosLogin.delete(clave);
+  for (const [clave, r] of intentos) {
+    if (r.expira <= ahora && msBloqueo(clave) === 0) intentos.delete(clave);
   }
-}, VENTANA_LOGIN_MS).unref();
+}, VENTANA_INTENTOS_MS).unref();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Normalización de campos del formulario.
+// Con `extended: true`, repetir un nombre (username=a&username=b) o usar la
+// sintaxis de objeto (username[x]=y) hace que req.body.username llegue como
+// array u objeto. Así, username.toLowerCase() lanzaba TypeError -> 500, y el
+// valor que se comparaba no era el mismo que contaba el limitador.
+const MAX_LARGO_CAMPO = 256;
+function campoTexto(valor) {
+  return typeof valor === 'string' ? valor : '';
+}
+
+// El MISMO texto para "no existe", "contraseña incorrecta" y "sin rol".
+// Cualquier diferencia convierte el login en un oráculo para descubrir qué
+// usuarios existen, que es el primer paso del credential stuffing.
+const CREDENCIALES_INVALIDAS = 'Usuario o contraseña incorrectos.';
+
+// Hash de descarte contra el que comparar cuando el usuario no existe.
+// Sin esto la respuesta vuelve al instante (nunca se llama a bcrypt/crypt) y
+// medir ese tiempo separa usuarios reales de inventados aunque el texto sea
+// idéntico. La contraseña es aleatoria: nadie puede acertarla nunca.
+const HASH_SENUELO = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10);
+async function gastarTiempoBcrypt(password) {
+  try { await bcrypt.compare(password, HASH_SENUELO); } catch (e) { /* irrelevante */ }
+}
+
+// Cuánto vive el estado "esta cuenta debe cambiar su contraseña".
+const CAMBIO_PASSWORD_MS = 10 * 60 * 1000;
 
 // GET /login
 router.get('/login', (req, res) => {
@@ -95,14 +219,23 @@ router.get('/login', (req, res) => {
 });
 
 // POST /login
-// POST /login
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  const username = campoTexto(req.body.username);
+  const password = campoTexto(req.body.password);
+
   if (!username || !password)
     return res.render('login', { error: 'Por favor ingresa usuario y contraseña.' });
 
-  if (bloqueadoPorIntentos(req))
-    return res.render('login', { error: 'Demasiados intentos fallidos. Espera unos minutos.' });
+  // Se corta antes de tocar la base o bcrypt: un campo de megabytes solo sirve
+  // para hacer trabajar al servidor, ninguna credencial real mide tanto.
+  if (username.length > MAX_LARGO_CAMPO || password.length > MAX_LARGO_CAMPO) {
+    registrarFallo(req, username.slice(0, MAX_LARGO_CAMPO));
+    return res.render('login', { error: CREDENCIALES_INVALIDAS });
+  }
+
+  const avisoBloqueo = mensajeBloqueo(req, username);
+  if (avisoBloqueo)
+    return res.render('login', { error: avisoBloqueo });
 
   try {
     // 1. Buscar en usuarios internos (empleados)
@@ -120,37 +253,67 @@ router.post('/login', async (req, res) => {
 
     if (result.rows.length > 0) {
       const usuario = result.rows[0];
-      if (!usuario.rol)
-        return res.render('login', { error: 'No tienes acceso a este sistema.' });
 
+      // Antes respondía "No tienes acceso a este sistema." ANTES de comprobar la
+      // contraseña y sin contar el intento: confirmaba que el usuario existe y
+      // se podía sondear la lista completa de empleados sin límite alguno.
+      if (!usuario.rol) {
+        await gastarTiempoBcrypt(password);
+        registrarFallo(req, username);
+        return res.render('login', { error: CREDENCIALES_INVALIDAS });
+      }
+
+      // password_hash puede venir NULL (alta a medias). Sin esta guarda,
+      // .startsWith() lanzaba TypeError y el catch de abajo devolvía "Error del
+      // servidor": otro mensaje distinto que delataba que la cuenta existe.
+      const hashGuardado = typeof usuario.password_hash === 'string' ? usuario.password_hash : '';
       let passwordOk = false;
-      if (usuario.password_hash.startsWith('$2b$') || usuario.password_hash.startsWith('$2a$')) {
-        passwordOk = await bcrypt.compare(password, usuario.password_hash);
-      } else {
+
+      if (hashGuardado.startsWith('$2b$') || hashGuardado.startsWith('$2a$')) {
+        passwordOk = await bcrypt.compare(password, hashGuardado);
+      } else if (hashGuardado) {
         const r = await poolBDPrincipal.query(
           `SELECT (password_hash = crypt($1, password_hash)) as ok FROM usuarios WHERE id = $2`,
           [password, usuario.id]
         );
-        passwordOk = r.rows[0]?.ok;
+        passwordOk = r.rows[0]?.ok === true;
+      } else {
+        await gastarTiempoBcrypt(password);
       }
 
       if (!passwordOk) {
-        registrarFallo(req);
-        return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+        registrarFallo(req, username);
+        return res.render('login', { error: CREDENCIALES_INVALIDAS });
       }
 
       // Si es su primer acceso, exigir cambio de contraseña antes de entrar
       if (!usuario.primer_acceso) {
+        limpiarIntentos(req, username);
+
+        // Regenerar TAMBIÉN aquí. El estado "esta sesión puede cambiar la
+        // contraseña de esta cuenta" vale tanto como estar dentro: si se guarda
+        // en el ID de sesión que ya traía el navegador, quien haya fijado esa
+        // cookie puede llamar a /cambiar-password, poner la contraseña que
+        // quiera y quedarse la cuenta. Es la misma fijación de sesión que
+        // iniciarSesion() evita en el camino normal.
+        if (!(await regenerarSesion(req)))
+          return res.render('login', { error: ERROR_SERVIDOR });
+
         req.session.cambioPasswordPendiente = {
           id:              usuario.id,
           username:        usuario.username,
           rol:             usuario.rol,
           nombre_completo: `${usuario.nombre} ${usuario.apellido_paterno} ${usuario.apellido_materno || ''}`.trim(),
+          expira:          Date.now() + CAMBIO_PASSWORD_MS,
         };
+
+        if (!(await guardarSesion(req)))
+          return res.render('login', { error: ERROR_SERVIDOR });
+
         return res.render('login', { error: null, cambioPassword: true, passwordError: null });
       }
 
-      limpiarIntentos(req);
+      limpiarIntentos(req, username);
       return iniciarSesion(req, res, 'user', {
         id:              usuario.id,
         username:        usuario.username,
@@ -169,8 +332,12 @@ router.post('/login', async (req, res) => {
     );
 
     if (!resultProv.rows.length) {
-      registrarFallo(req);
-      return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+      // El usuario no está en ninguna de las dos tablas: sin esto se responde
+      // sin haber ejecutado ni bcrypt ni crypt, y ese hueco de tiempo distingue
+      // un usuario inexistente de uno real con la contraseña equivocada.
+      await gastarTiempoBcrypt(password);
+      registrarFallo(req, username);
+      return res.render('login', { error: CREDENCIALES_INVALIDAS });
     }
 
     const proveedor = resultProv.rows[0];
@@ -181,12 +348,12 @@ router.post('/login', async (req, res) => {
       [password, proveedor.id_proveedor]
     );
 
-    if (!rPwd.rows[0]?.ok) {
-      registrarFallo(req);
-      return res.render('login', { error: 'Usuario o contraseña incorrectos.' });
+    if (rPwd.rows[0]?.ok !== true) {
+      registrarFallo(req, username);
+      return res.render('login', { error: CREDENCIALES_INVALIDAS });
     }
 
-    limpiarIntentos(req);
+    limpiarIntentos(req, username);
     return iniciarSesion(req, res, 'user', {
       id:              proveedor.id_proveedor,
       username:        proveedor.username,
@@ -196,7 +363,7 @@ router.post('/login', async (req, res) => {
 
   } catch(e) {
     console.error('Error login:', e);
-    return res.render('login', { error: 'Error del servidor. Intenta de nuevo.' });
+    return res.render('login', { error: ERROR_SERVIDOR });
   }
 });
 
@@ -205,13 +372,25 @@ router.post('/cambiar-password', async (req, res) => {
   const pendiente = req.session.cambioPasswordPendiente;
   if (!pendiente) return res.redirect('/login');
 
-  const { nueva_password, confirmar_password } = req.body;
+  // El permiso para cambiar la contraseña caduca solo. Sin esto vivía las 12 h
+  // de la cookie: en un equipo compartido, cualquiera que llegara después con
+  // esa pestaña abierta podía fijar la contraseña de la cuenta ajena.
+  if (!pendiente.expira || Date.now() > pendiente.expira) {
+    delete req.session.cambioPasswordPendiente;
+    return res.render('login', { error: 'La sesión expiró. Vuelve a iniciar sesión.' });
+  }
+
+  const nueva_password    = campoTexto(req.body.nueva_password);
+  const confirmar_password = campoTexto(req.body.confirmar_password);
 
   const renderError = (msg) =>
     res.render('login', { error: null, cambioPassword: true, passwordError: msg });
 
   if (!nueva_password || !confirmar_password)
     return renderError('Completa ambos campos.');
+
+  if (nueva_password.length > MAX_LARGO_CAMPO)
+    return renderError(`La contraseña no puede pasar de ${MAX_LARGO_CAMPO} caracteres.`);
 
   if (nueva_password !== confirmar_password)
     return renderError('Las contraseñas no coinciden.');
@@ -240,7 +419,7 @@ router.post('/cambiar-password', async (req, res) => {
 
   } catch(e) {
     console.error('Error cambiando contraseña:', e);
-    return renderError('Error del servidor. Intenta de nuevo.');
+    return renderError(ERROR_SERVIDOR);
   }
 });
 
@@ -285,13 +464,18 @@ router.get('/login-asistencia', (req, res) => {
 });
 
 router.post('/login-asistencia', (req, res) => {
-  const { username, password } = req.body;
+  // Mismo saneado que el login principal: si username llega como array,
+  // mensajeBloqueo() y registrarFallo() cuentan bajo una clave distinta de la
+  // que se compara, y el limitador deja de contar los intentos reales.
+  const username = campoTexto(req.body.username).slice(0, MAX_LARGO_CAMPO);
+  const password = campoTexto(req.body.password).slice(0, MAX_LARGO_CAMPO);
 
   if (!ASISTENCIA_CONFIGURADA)
     return res.render('login-asistencia', { error: 'Módulo no configurado. Contacta al administrador.' });
 
-  if (bloqueadoPorIntentos(req))
-    return res.render('login-asistencia', { error: 'Demasiados intentos fallidos. Espera unos minutos.' });
+  const avisoBloqueoAsistencia = mensajeBloqueo(req, username);
+  if (avisoBloqueoAsistencia)
+    return res.render('login-asistencia', { error: avisoBloqueoAsistencia });
 
   // Se evalúan ambas siempre, aunque la primera ya haya fallado: así el tiempo
   // de respuesta no delata si lo que estaba mal era el usuario o la contraseña
@@ -299,7 +483,7 @@ router.post('/login-asistencia', (req, res) => {
   const okPassword = comparaSeguro(password, ASISTENCIA_PASSWORD);
 
   if (okUsuario && okPassword) {
-    limpiarIntentos(req);
+    limpiarIntentos(req, username);
     return iniciarSesion(req, res, 'asistencia_user', {
       id: 0, username: ASISTENCIA_USERNAME,
       rol: 'seguridad_fisica',
@@ -307,7 +491,7 @@ router.post('/login-asistencia', (req, res) => {
     }, '/verificar', 'login-asistencia');
   }
 
-  registrarFallo(req);
+  registrarFallo(req, username, 'login-asistencia');
   return res.render('login-asistencia', { error: 'Usuario o contraseña incorrectos.' });
 });
 
@@ -387,12 +571,19 @@ router.post('/registro/extraer-pdf', upload.single('constancia'), async (req, re
 
 // POST /registro/enviar-codigo
 router.post('/registro/enviar-codigo', upload.single('constancia'), async (req, res) => {
-  
-  // DEBUG - borra esto después
-  console.log('=== RUTA ALCANZADA ===');
-  console.log('Body:', req.body);
-  console.log('Archivo recibido:', req.file ? `SÍ - ${req.file.originalname} (${req.file.size} bytes)` : 'NO');
-  
+
+  // Sin tope, este endpoint permite pedir códigos en bucle: cada llamada dispara
+  // un correo vía N8N (spam al destinatario y coste) y regenera el código, lo que
+  // además serviría para reiniciar el contador de fallos de verificar-codigo.
+  const esperaEnvio = bloqueoPorIp(req, 'envio-codigo');
+  if (esperaEnvio > 0) {
+    return res.render('registro', {
+      error: `Demasiadas solicitudes de código. Espera ${Math.ceil(esperaEnvio / 60000)} minutos e intenta de nuevo.`,
+      paso: 'formulario'
+    });
+  }
+  falloPorIp(req, 'envio-codigo', MAX_ENVIOS_CODIGO);
+
   const { rfc, razon_social, correo, telefono, representante, padron } = req.body;
   
   // 1. Leer texto del PDF
@@ -449,14 +640,17 @@ router.post('/registro/enviar-codigo', upload.single('constancia'), async (req, 
     }
   }
 
-  // 3. Generar código de 6 dígitos
-  const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+  // 3. Generar código de 6 dígitos.
+  // crypto.randomInt y no Math.random(): Math.random() no es criptográfico y su
+  // salida se puede predecir observando valores previos.
+  const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const expira = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
-  // 4. Guardar en memoria
+  // 4. Guardar en memoria (`fallos` limita el fuerza bruta contra el código)
   codigosPendientes[correo] = {
     codigo,
     expira,
+    fallos: 0,
     datos: { razon_social: razonExtraida, rfc: rfcExtraido, correo, telefono, representante, padron: padron || null }
   };
 
@@ -491,6 +685,18 @@ try {
 router.post('/registro/verificar-codigo', async (req, res) => {
   const { correo, codigo } = req.body;
 
+  // 0. Un código de 6 dígitos son solo 1,000,000 de combinaciones: sin límite de
+  //    intentos se agota por fuerza bruta en horas. Se frena por IP y, más abajo,
+  //    invalidando el código tras MAX_INTENTOS_CODIGO fallos.
+  const esperaCodigo = bloqueoPorIp(req, 'codigo');
+  if (esperaCodigo > 0) {
+    return res.render('registro', {
+      error: `Demasiados intentos fallidos. Espera ${Math.ceil(esperaCodigo / 60000)} minutos e intenta de nuevo.`,
+      paso: 'verificacion',
+      correo
+    });
+  }
+
   // 1. Buscar el registro pendiente
   const pendiente = codigosPendientes[correo];
 
@@ -510,10 +716,30 @@ router.post('/registro/verificar-codigo', async (req, res) => {
     });
   }
 
-  // 3. Verificar que el código sea correcto
-  if (pendiente.codigo !== codigo.trim()) {
+  // 3. Verificar que el código sea correcto.
+  //    timingSafeEqual para no filtrar cuántos dígitos coinciden por el tiempo
+  //    de respuesta; los buffers se igualan en longitud primero.
+  const enviado  = Buffer.from(String(codigo || '').trim());
+  const esperado = Buffer.from(pendiente.codigo);
+  const codigoOk = enviado.length === esperado.length && crypto.timingSafeEqual(enviado, esperado);
+
+  if (!codigoOk) {
+    pendiente.fallos = (pendiente.fallos || 0) + 1;
+    falloPorIp(req, 'codigo', MAX_INTENTOS_CODIGO);
+    console.warn(`[seguridad] código de registro incorrecto ip=${ipCliente(req)} correo=${String(correo || '').slice(0, 80)}`);
+
+    // Quemado el código tras varios fallos: obliga a pedir uno nuevo, así no se
+    // puede seguir probando contra el mismo valor durante los 15 min de vigencia.
+    if (pendiente.fallos >= MAX_INTENTOS_CODIGO) {
+      delete codigosPendientes[correo];
+      return res.render('registro', {
+        error: 'Demasiados intentos incorrectos. El código se canceló, vuelve a registrarte para recibir uno nuevo.',
+        paso: 'formulario'
+      });
+    }
+
     return res.render('registro', {
-      error: 'Código incorrecto. Intenta de nuevo.',
+      error: `Código incorrecto. Te quedan ${MAX_INTENTOS_CODIGO - pendiente.fallos} intentos.`,
       paso: 'verificacion',
       correo
     });
@@ -550,7 +776,12 @@ router.post('/registro/verificar-codigo', async (req, res) => {
     }
 
     // Generar contraseña temporal de 8 caracteres
-    const tempPassword = Math.random().toString(36).slice(2, 10).toUpperCase();
+    // Alfabeto sin 0/O ni 1/I/L: la contraseña se dicta por teléfono o se copia
+    // de un correo, y esos pares se confunden al leerlos. 10 chars sobre 32
+    // símbolos ~ 50 bits, suficiente para que no se adivine antes del cambio.
+    const ALFABETO_TEMP = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const tempPassword = Array.from({ length: 10 },
+      () => ALFABETO_TEMP[crypto.randomInt(0, ALFABETO_TEMP.length)]).join('');
     // Usar RFC como usuario (en minúsculas para consistencia con el login)
     const usuario = rfc.toLowerCase();
 
@@ -592,13 +823,6 @@ router.post('/registro/verificar-codigo', async (req, res) => {
       correo
     });
   }
-});
-
-
-
-router.get('/login', (req, res) => {
-  if (req.session.user) return res.redirect('/dashboard');
-  res.render('login', { error: null, query: req.query });
 });
 
 

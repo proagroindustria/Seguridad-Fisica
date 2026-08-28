@@ -830,6 +830,21 @@ input[type="number"].cell-input { width: 70px; min-width: 60px; }
 .dnd-file-btn.compact svg { width: 11px; height: 11px; }
 .file-label-text { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Los errores del adjunto NO caben en .file-label-text (90px con ellipsis): ahí
+   solo va la marca. El motivo se escribe aquí, donde puede ocupar varias líneas.
+   Antes el usuario veía "❌ Erro…" y no había forma de saber qué había fallado. */
+.file-error {
+  display: none;
+  margin-top: 5px;
+  max-width: 240px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--danger);
+  white-space: normal;
+  word-break: break-word;
+}
+
 .btn-del-row {
   background: none; border: none; color: var(--text-3);
   cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;

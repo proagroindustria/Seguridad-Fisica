@@ -553,8 +553,12 @@ const SECTION_COLS = {
     { id: 'placas',   label: 'PLACAS',   placeholder: 'Ej. ABC-123-D', type: 'text', required: true },
     // Foto obligatoria. accept="image/*" SIN capture: así el móvil ofrece las tres
     // vías (cámara del SO, galería, archivos) y el botón 📷 agrega la captura in-app.
+    // .heic/.heif explícitos: con solo image/* el explorador de Windows no lista
+    // los archivos que salen de un iPhone, así que la foto "no se podía subir" sin
+    // que apareciera error alguno. Listándolos, al menos se elige el archivo y
+    // decodificarImagen() explica qué hacer en vez de dejar el campo mudo.
     // 'ligera': se comprime más que los documentos porque no pasa por OCR.
-    { id: 'foto', label: 'FOTO DEL VEHÍCULO', placeholder: '', type: 'file', accept: 'image/*',
+    { id: 'foto', label: 'FOTO DEL VEHÍCULO', placeholder: '', type: 'file', accept: 'image/*,.heic,.heif',
       required: true, camera: true, ligera: true, camaraTitulo: 'VEHÍCULO', camaraAspecto: '4/3' },
     { id: 'seguro',   label: 'SEGURO',   placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
     { id: 'tarjeta_circulacion', label: 'TARJETA DE CIRCULACIÓN', placeholder: '', type: 'file', accept: '.pdf,.jpg,.jpeg,.png' },
@@ -900,6 +904,7 @@ function buildRowHTML(tipo, rowId, rowNum) {
             title="Quitar documento"
             style="display:none;flex-shrink:0;background:none;border:1px solid var(--danger);color:var(--danger);cursor:pointer;padding:3px 6px;font-size:13px;line-height:1">×</button>
         </div>
+        <div class="file-error" id="ferr-${rowId}-${c.id}"></div>
         ${c.showMsg ? `<div id="doc-msg-${rowId}" style="font-size:11px;margin-top:5px;font-family:'Share Tech Mono',monospace;line-height:1.4;"></div>` : ''}
       </td>`;
     }
@@ -1362,14 +1367,57 @@ function onCellChange(tipo, rowId, fieldId, value) {
 
 
 
+// El texto del label vive en un span de 90px con ellipsis (.file-label-text):
+// cualquier mensaje largo se veía como "❌ Erro…" y el usuario no tenía forma de
+// saber qué había fallado. El texto completo va siempre al title (tooltip) y los
+// errores, además, a su propia línea debajo de la celda.
+function setLabelArchivo(rowId, fieldId, texto) {
+  const label = document.getElementById(`fl-${rowId}-${fieldId}`);
+  if (!label) return;
+  label.textContent = texto;
+  label.title = texto;
+}
+
+function mostrarErrorArchivo(rowId, fieldId, mensaje) {
+  const el = document.getElementById(`ferr-${rowId}-${fieldId}`);
+  if (!el) return;
+  el.textContent = mensaje;
+  el.style.display = 'block';
+}
+
+function limpiarErrorArchivo(rowId, fieldId) {
+  const el = document.getElementById(`ferr-${rowId}-${fieldId}`);
+  if (!el) return;
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+// Manda el error al servidor para que quede en los logs de pm2. Sin esto el único
+// testigo de la falla es el usuario, y reconstruir qué pasó depende de que él lo
+// recuerde. keepalive: la petición sobrevive aunque cierre la pestaña enseguida.
+function reportarErrorCliente(contexto, error, extra) {
+  try {
+    fetch('/api/log-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contexto,
+        error: String((error && error.message) || error),
+        ...(extra || {}),
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (e) { /* el log nunca debe romper el flujo del usuario */ }
+}
+
 function clearDocumento(tipo, rowId, fieldId) {
   // Reset input
   const input = document.getElementById(`finput-${rowId}-${fieldId}`);
   if (input) input.value = '';
 
   // Reset label
-  const label = document.getElementById(`fl-${rowId}-${fieldId}`);
-  if (label) label.textContent = 'Adjuntar';
+  setLabelArchivo(rowId, fieldId, 'Adjuntar');
+  limpiarErrorArchivo(rowId, fieldId);
 
   // Ocultar botón X
   const clearBtn = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
@@ -1410,9 +1458,9 @@ function clearDocumento(tipo, rowId, fieldId) {
 
 async function onFileChange(tipo, rowId, fieldId, input) {
   const file = input.files[0];
-  const label = document.getElementById(`fl-${rowId}-${fieldId}`);
   if (!file) return;
-  if (label) label.textContent = '⏳ Procesando...';
+  limpiarErrorArchivo(rowId, fieldId);
+  setLabelArchivo(rowId, fieldId, '⏳ Procesando...');
 
   const colDef = (SECTION_COLS[tipo] || []).find(c => c.id === fieldId) || {};
 
@@ -1435,7 +1483,7 @@ async function onFileChange(tipo, rowId, fieldId, input) {
     }
 
     // ── Subir UNA sola vez al servidor; de aquí en adelante circula solo el token ──
-    if (label) label.textContent = '⬆ Subiendo...';
+    setLabelArchivo(rowId, fieldId, '⬆ Subiendo...');
     const stashResp = await fetch('/documentos/stash', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1443,6 +1491,10 @@ async function onFileChange(tipo, rowId, fieldId, input) {
     });
     if (!stashResp.ok) {
       const tamMB = (base64.length / 1024 / 1024).toFixed(1);
+      // El 401 se distingue a propósito: es el caso más confuso, porque la página
+      // sigue abierta y todo parece funcionar hasta que se intenta subir algo.
+      if (stashResp.status === 401)
+        throw new Error('tu sesión expiró. Recarga la página, inicia sesión otra vez y vuelve a adjuntar.');
       throw new Error(stashResp.status === 413
         ? `la imagen pesa demasiado para el servidor (${tamMB} MB, HTTP 413 — límite nginx)`
         : `el servidor rechazó la subida (HTTP ${stashResp.status})`);
@@ -1460,11 +1512,11 @@ async function onFileChange(tipo, rowId, fieldId, input) {
     if (fieldId === 'seguro')   webhookUrl = '/api/procesar-seguro';
     if (fieldId === 'licencia') webhookUrl = '/api/procesar-licencia';
 
-    if (label) label.textContent = webhookUrl ? '🔍 Analizando con IA...' : '✅ ' + (file.name.length > 12 ? file.name.substring(0,12)+'…' : file.name);
+    setLabelArchivo(rowId, fieldId, webhookUrl ? '🔍 Analizando con IA...' : '✅ ' + (file.name.length > 12 ? file.name.substring(0,12)+'…' : file.name));
 
     // ── Documentos de identificación de personal (INE / PASAPORTE / LICENCIA) ──
     if (tipo === 'personal' && (fieldId === 'documento_ine' || fieldId === 'documento')) {
-      if (label) label.textContent = file.name.length > 22 ? file.name.slice(0, 20) + '…' : file.name;
+      setLabelArchivo(rowId, fieldId, file.name.length > 22 ? file.name.slice(0, 20) + '…' : file.name);
       const clearBtn = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
       if (clearBtn) clearBtn.style.display = 'inline-block';
       await validarDocumentoPersonal(tipo, rowId, docToken);
@@ -1490,13 +1542,13 @@ async function onFileChange(tipo, rowId, fieldId, input) {
           const txt = data.vigente
             ? `✅ ${data.aseguradora || 'Seguro'} · Serie: ${serie} · Vence: ${data.vigencia_fin || '—'}`
             : `⚠️ Seguro NO VIGENTE · Vence: ${data.vigencia_fin || '—'}`;
-          if (label) label.textContent = txt;
+          setLabelArchivo(rowId, fieldId, txt);
         } else if (fieldId === 'licencia') {
           vehicValidaciones[rowId].licencia = data.vigente === true;
           const txt = data.vigente 
             ? `✅ ${data.nombre_conductor || '—'} · Lic: ${data.numero_licencia || '—'} · Tipo: ${data.tipo_licencia || '—'}` 
             : `⚠️ Licencia NO VIGENTE · ${data.nombre_conductor || '—'}`;
-          if (label) label.textContent = txt;
+          setLabelArchivo(rowId, fieldId, txt);
         }
 
 
@@ -1505,14 +1557,15 @@ async function onFileChange(tipo, rowId, fieldId, input) {
 
       } catch(e) {
         console.warn('Error analizando con IA:', e.message);
+        reportarErrorCliente('ia-' + fieldId, e, { archivo: file && file.name });
         const nombre = file.name;
-        if (label) label.textContent = '✅ ' + (nombre.length > 12 ? nombre.substring(0,12)+'…' : nombre);
+        setLabelArchivo(rowId, fieldId, '✅ ' + (nombre.length > 12 ? nombre.substring(0,12)+'…' : nombre));
       }
       const cb = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
       if (cb) cb.style.display = 'inline-block';
     } else {
       const nombre = file.name;
-      if (label) label.textContent = '✅ ' + (nombre.length > 12 ? nombre.substring(0,12)+'…' : nombre);
+      setLabelArchivo(rowId, fieldId, '✅ ' + (nombre.length > 12 ? nombre.substring(0,12)+'…' : nombre));
       const cb = document.getElementById(`fbtn-clear-${rowId}-${fieldId}`);
       if (cb) cb.style.display = 'inline-block';
       // Campos sin análisis de IA (foto del vehículo): recalcular aquí, porque
@@ -1526,7 +1579,18 @@ async function onFileChange(tipo, rowId, fieldId, input) {
     updateRowCount(tipo);
   } catch(e) {
     console.error('Error procesando archivo:', e);
-    if (label) label.textContent = '❌ Error: ' + e.message;
+    // En el label solo cabe la marca; el motivo va a la línea de error de la celda,
+    // que sí puede crecer, y una copia al servidor para que quede en los logs.
+    setLabelArchivo(rowId, fieldId, '❌ No se pudo adjuntar');
+    mostrarErrorArchivo(rowId, fieldId, e.message);
+    reportarErrorCliente('adjuntar-' + fieldId, e, {
+      archivo: file && file.name,
+      mime:    (file && file.type) || '(el navegador no reconoció el tipo)',
+      tamano:  file ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : '—',
+    });
+    // Limpiar el input: si no, volver a elegir el MISMO archivo no dispara change
+    // y al usuario le parece que el botón dejó de responder.
+    input.value = '';
   }
 }
 
@@ -1922,10 +1986,14 @@ function renderPagina() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;vertical-align:middle;margin-right:3px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Ver
     </button>`;
     const pvBadge = p.es_pase_visita ? `<span style="display:inline-block;font-family:'Share Tech Mono',monospace;font-size:9px;background:var(--accent);color:#000;padding:1px 6px;letter-spacing:0.08em;font-weight:700;vertical-align:middle;margin-left:6px">PV</span>` : '';
+    // Venció porque se agotó la gracia, con gente que nunca registró salida
+    const sinSalidaBadge = p.cerrado_sin_salida
+      ? `<span title="${escapeHtml(p.cerrado_sin_salida_detalle || 'Venció sin registro de salida')}" style="display:inline-block;font-family:'Share Tech Mono',monospace;font-size:9px;background:#ef4444;color:#fff;padding:1px 6px;letter-spacing:0.08em;font-weight:700;vertical-align:middle;margin-left:6px;cursor:help">SIN SALIDA</span>`
+      : '';
     return `<tr><td class="td-folio">${p.folio}${pvBadge}</td><td class="td-empresa">${escapeHtml(p.empresa)}</td>
       <td>${escapeHtml(p.contrato)}</td><td class="td-responsable">${escapeHtml(p.responsable_contrato)}</td>
       <td>${formatFecha(p.fecha_inicio)}</td><td>${formatFecha(p.fecha_fin)}</td>
-      <td><span class="duration-chip">${dias}d</span></td><td>${badge}</td>
+      <td><span class="duration-chip">${dias}d</span></td><td style="white-space:nowrap">${badge}${sinSalidaBadge}</td>
       <td style="white-space:nowrap">${verBtn}</td></tr>`;
   }).join('');
 
@@ -2173,8 +2241,18 @@ lotes.forEach(lote => {
 
 
     body.innerHTML = `
+      ${solicitud.cerrado_sin_salida ? `
+      <div style="margin-bottom:18px;padding:12px 16px;border-left:3px solid #ef4444;background:rgba(239,68,68,0.08)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;color:#ef4444;font-size:14px">
+          ⚠ VENCIDO SIN REGISTRO DE SALIDA
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:6px;line-height:1.5">
+          El permiso se venció automáticamente al agotarse el plazo de espera. El siguiente personal
+          nunca registró su salida en la caseta:<br>
+          <span class="mono" style="color:var(--text)">${escapeHtml(solicitud.cerrado_sin_salida_detalle || '')}</span>
+        </div>
+      </div>` : ''}
 
-    
       <!-- DATOS GENERALES -->
       <div class="detalle-section">
         <div class="detalle-section-title">

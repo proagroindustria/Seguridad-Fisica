@@ -93,6 +93,51 @@ app.get('/api/debug-config', (req, res) => {
 });
 const _startTime = Date.now();
 
+// ── Log de errores del cliente ────────────────────────────────────────────────
+// El navegador es el único que ve por qué falló un adjunto (formato que no puede
+// decodificar, memoria agotada, sesión caducada). Sin este endpoint el reporte
+// depende de lo que el usuario alcance a contar, y el mensaje que él ve va
+// truncado en la celda.
+//
+// No exige sesión a propósito: el caso más útil de registrar es justamente aquel
+// en el que la sesión ya expiró. A cambio va acotado — campos truncados y tope
+// por IP — para que no se convierta en un canal para inundar los logs.
+const LOG_CLIENTE_MAX_POR_IP = 30;
+const LOG_CLIENTE_VENTANA_MS = 10 * 60 * 1000;
+const logsCliente = new Map();
+
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [ip, r] of logsCliente) if (r.expira <= ahora) logsCliente.delete(ip);
+}, LOG_CLIENTE_VENTANA_MS).unref();
+
+// Recorta y aplana: un salto de línea en el cuerpo permitiría inyectar entradas
+// falsas en el log haciéndolas pasar por líneas propias del servidor.
+const _cortaLog = (v, n) => String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').slice(0, n);
+
+app.post('/api/log-cliente', (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'desconocida';
+  const ahora = Date.now();
+  const previo = logsCliente.get(ip);
+  const reg = (previo && previo.expira > ahora) ? previo : { n: 0, expira: ahora + LOG_CLIENTE_VENTANA_MS };
+  reg.n += 1;
+  logsCliente.set(ip, reg);
+  if (reg.n > LOG_CLIENTE_MAX_POR_IP) return res.status(429).json({ ok: false });
+
+  const b = req.body || {};
+  console.error(
+    `[CLIENTE] ${_cortaLog(b.contexto, 40) || 'sin-contexto'}` +
+    ` | usuario=${_cortaLog(req.session?.user?.username, 40) || 'anonimo'}` +
+    ` | ip=${ip}` +
+    ` | error="${_cortaLog(b.error, 300)}"` +
+    ` | archivo=${_cortaLog(b.archivo, 120) || '—'}` +
+    ` | mime=${_cortaLog(b.mime, 60) || '—'}` +
+    ` | tam=${_cortaLog(b.tamano, 20) || '—'}` +
+    ` | ua=${_cortaLog(req.headers['user-agent'], 180)}`
+  );
+  res.json({ ok: true });
+});
+
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/solicitudes', solicitudesRoutes);
@@ -301,8 +346,16 @@ const poolFacialCron = new Pool({
 // durante la vigencia del permiso autorizado.
 // =============================================================================
 
-// Devuelve true si alguna persona del permiso tiene su último acceso como 'entrada' (sigue adentro)
-async function algunoAdentro(permisoId) {
+// Horas de gracia que el sistema espera, contadas desde el final del último día
+// de vigencia del permiso, antes de vencerlo aunque queden entradas sin salida
+// registrada. Al agotarse se vence igual y se deja constancia de quién no salió.
+const HORAS_GRACIA_SIN_SALIDA = parseInt(process.env.HORAS_GRACIA_SIN_SALIDA || '48', 10);
+
+// Devuelve las personas del permiso cuyo último acceso ligado a ese permiso es
+// una 'entrada' — las que el sistema considera que siguen adentro.
+// Array vacío = nadie pendiente, el permiso puede vencer sin más.
+async function personasSinSalida(permisoId) {
+  const pendientes = [];
   try {
     const personal = await poolCron.query(
       `SELECT nombre, trabajador_id FROM permiso_personal WHERE permiso_id = $1`,
@@ -332,34 +385,72 @@ async function algunoAdentro(permisoId) {
 
       // Verificar si entró usando ESTE permiso y no ha salido
       const entroConEstePermiso = await poolFacialCron.query(
-        `SELECT tipo_movimiento FROM accesos
+        `SELECT id, tipo_movimiento, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot
+         FROM accesos
          WHERE empleado_id = $1 AND permiso_id = $2 AND resultado = 'exitoso'
          ORDER BY fecha_hora DESC LIMIT 1`,
         [empleadoId, permisoId]
       );
 
-      if (entroConEstePermiso.rows.length > 0 && entroConEstePermiso.rows[0].tipo_movimiento === 'entrada') {
-        console.log(`⚠ ${p.nombre} sigue adentro con permiso ${permisoId} — bloqueado`);
-        return true;
+      const ultimo = entroConEstePermiso.rows[0];
+      if (ultimo && ultimo.tipo_movimiento === 'entrada') {
+        console.log(`⚠ ${p.nombre} sigue adentro con permiso ${permisoId}`);
+        pendientes.push({
+          nombre:          p.nombre,
+          empleadoId,
+          fechaEntrada:    ultimo.fecha_hora,
+          nombreSnapshot:  ultimo.nombre_snapshot,
+          areaSnapshot:    ultimo.area_snapshot,
+          empresaSnapshot: ultimo.empresa_snapshot,
+        });
       }
     }
-    return false;
+    return pendientes;
   } catch(e) {
-    console.error(`❌ algunoAdentro(${permisoId}):`, e.message);
-    return false; // En caso de error, permitir vencer para no bloquear indefinidamente
+    console.error(`❌ personasSinSalida(${permisoId}):`, e.message);
+    return []; // En caso de error, permitir vencer para no bloquear indefinidamente
+  }
+}
+
+// Cierra por sistema las entradas que quedaron abiertas. Sin esto la persona
+// queda "adentro" para siempre en reconocimiento_db: su siguiente escaneo en la
+// caseta se leería como SALIDA y se saltaría la validación de permiso vigente
+// (facial.js sólo valida el permiso cuando cree que la persona va entrando).
+// La fila queda marcada en 'observaciones' para no confundirla con una salida real.
+async function cerrarEntradasAbiertas(permiso, pendientes) {
+  const finVigencia = new Date(permiso.fecha_fin).toLocaleDateString('es-MX');
+  const nota = `Salida registrada automáticamente por el sistema: el permiso ${permiso.folio} ` +
+               `venció el ${finVigencia} y pasaron más de ${HORAS_GRACIA_SIN_SALIDA} h sin que se registrara la salida.`;
+
+  for (const p of pendientes) {
+    try {
+      await poolFacialCron.query(
+        `INSERT INTO accesos (empleado_id, resultado, ip_origen, user_agent, tipo_movimiento,
+                              permiso_id, fecha_hora, nombre_snapshot, area_snapshot, empresa_snapshot, observaciones)
+         VALUES ($1, 'exitoso', NULL, 'sistema/auto-vencimiento', 'salida', $2, NOW(), $3, $4, $5, $6)`,
+        [p.empleadoId, permiso.id, p.nombreSnapshot || p.nombre, p.areaSnapshot, p.empresaSnapshot, nota]
+      );
+      console.log(`🔒 Salida automática registrada para ${p.nombre} (permiso ${permiso.folio})`);
+    } catch(e) {
+      console.error(`❌ No se pudo cerrar la entrada de ${p.nombre}:`, e.message);
+    }
   }
 }
 
 async function vencerPermisosExpirados() {
-  console.log('⏰ [v2-con-check-salidas] vencerPermisosExpirados iniciado');
+  console.log('⏰ [v3-con-cierre-forzado] vencerPermisosExpirados iniciado');
   try {
-    // Obtener candidatos uno a uno para poder verificar si hay gente adentro
+    // Obtener candidatos uno a uno para poder verificar si hay gente adentro.
+    // 'gracia_agotada' se calcula en la base para no depender de la zona horaria
+    // de Node: el permiso vale hasta el final de fecha_fin (fecha_fin + 1 día),
+    // y a partir de ahí corren las HORAS_GRACIA_SIN_SALIDA.
     const candidatos = await poolCron.query(`
-      SELECT id, folio, es_pase_visita
+      SELECT id, folio, estado, es_pase_visita, fecha_fin,
+             NOW() > (fecha_fin + INTERVAL '1 day' + ($1 || ' hours')::interval) AS gracia_agotada
       FROM permisos
       WHERE estado NOT IN ('rechazado', 'vencido')
         AND fecha_fin < CURRENT_DATE
-    `);
+    `, [String(HORAS_GRACIA_SIN_SALIDA)]);
 
     if (candidatos.rowCount === 0) {
       console.log('⏰ Auto-vencimiento: sin permisos que vencer.');
@@ -370,16 +461,44 @@ async function vencerPermisosExpirados() {
     const r = { rows: [], rowCount: 0 };
 
     for (const permiso of candidatos.rows) {
-      const bloqueado = await algunoAdentro(permiso.id);
-      if (bloqueado) {
-        console.log(`⏳ Permiso ${permiso.folio} expiró pero hay personal aún adentro — se vencerá cuando todos salgan`);
-        continue;
+      const pendientes = await personasSinSalida(permiso.id);
+      let detalleCierre = null;   // null = venció limpio, todos registraron salida
+
+      if (pendientes.length > 0) {
+        // Dentro del periodo de gracia se sigue esperando, como hasta ahora.
+        if (!permiso.gracia_agotada) {
+          console.log(`⏳ Permiso ${permiso.folio} expiró pero hay personal aún adentro — se vencerá cuando salgan o al agotarse las ${HORAS_GRACIA_SIN_SALIDA} h de gracia`);
+          continue;
+        }
+
+        // Gracia agotada: se vence igual y queda constancia de quién no salió.
+        detalleCierre = pendientes
+          .map(p => `${p.nombre} — entrada ${new Date(p.fechaEntrada).toLocaleString('es-MX')}, sin salida registrada`)
+          .join(' | ');
+        console.log(`🚨 Permiso ${permiso.folio}: ${HORAS_GRACIA_SIN_SALIDA} h de gracia agotadas — se vence con ${pendientes.length} persona(s) sin salida`);
+        await cerrarEntradasAbiertas(permiso, pendientes);
       }
 
       await poolCron.query(
-        `UPDATE permisos SET estado = 'vencido', actualizado_en = NOW() WHERE id = $1`,
-        [permiso.id]
+        `UPDATE permisos
+            SET estado = 'vencido',
+                cerrado_sin_salida = $2,
+                cerrado_sin_salida_detalle = $3,
+                actualizado_en = NOW()
+          WHERE id = $1`,
+        [permiso.id, detalleCierre !== null, detalleCierre]
       );
+
+      // Constancia en el historial del permiso (cambiado_por = NULL → el sistema)
+      await poolCron.query(
+        `INSERT INTO permiso_historial (permiso_id, estado_anterior, estado_nuevo, cambiado_por, comentario)
+         VALUES ($1, $2, 'vencido', NULL, $3)`,
+        [permiso.id, permiso.estado,
+         detalleCierre
+           ? `Vencido por el sistema tras ${HORAS_GRACIA_SIN_SALIDA} h sin registro de salida. Personal sin salida: ${detalleCierre}`
+           : 'Vencido automáticamente al terminar la vigencia.']
+      ).catch(e => console.error(`❌ historial de ${permiso.folio}:`, e.message));
+
       r.rows.push(permiso);
       r.rowCount++;
     }
@@ -604,8 +723,15 @@ function programarVencimiento() {
 }
 
 const poolMigration = require('./db/connection');
-poolMigration.query(
+
+// Constancia de vencimiento con entradas abiertas: se marca cuando el permiso se
+// venció porque se agotaron las horas de gracia, no porque todos hayan salido.
+const migracionesPermisos = poolMigration.query(
   `ALTER TABLE permisos ADD COLUMN IF NOT EXISTS es_pase_visita BOOLEAN NOT NULL DEFAULT FALSE`
+).then(() =>
+  poolMigration.query(`ALTER TABLE permisos ADD COLUMN IF NOT EXISTS cerrado_sin_salida BOOLEAN NOT NULL DEFAULT FALSE`)
+).then(() =>
+  poolMigration.query(`ALTER TABLE permisos ADD COLUMN IF NOT EXISTS cerrado_sin_salida_detalle TEXT`)
 ).then(() =>
   poolMigration.query(`
     CREATE OR REPLACE VIEW vista_permisos AS
@@ -637,7 +763,8 @@ poolMigration.query(
       p.firma_area_ip, p.firma_area_ip_privada,
       p.firma_area_ubicacion, p.firma_area_fecha, p.firma_area_usuario,
       p.firma_aprobacion_ip, p.firma_aprobacion_ip_privada,
-      p.firma_aprobacion_ubicacion, p.firma_aprobacion_fecha, p.firma_aprobacion_usuario
+      p.firma_aprobacion_ubicacion, p.firma_aprobacion_fecha, p.firma_aprobacion_usuario,
+      p.cerrado_sin_salida, p.cerrado_sin_salida_detalle
     FROM permisos p
     LEFT JOIN usuarios uc ON p.creado_por             = uc.id
     LEFT JOIN usuarios ua ON p.aprobado_por_area      = ua.id
@@ -645,6 +772,12 @@ poolMigration.query(
     LEFT JOIN usuarios ur ON p.rechazado_por          = ur.id
   `)
 ).catch(e => console.warn('[migration] vista_permisos:', e.message));
+
+// Marca las salidas que registró el auto-vencimiento, para no confundirlas con
+// una salida real de la caseta.
+poolFacialCron.query(
+  `ALTER TABLE accesos ADD COLUMN IF NOT EXISTS observaciones TEXT`
+).catch(e => console.warn('[migration] accesos.observaciones:', e.message));
 
 poolMigration.query(
   `ALTER TABLE permiso_personal ADD COLUMN IF NOT EXISTS nss VARCHAR(20)`
@@ -673,10 +806,14 @@ app.listen(PORT, () => {
   // AVISO LEGAL: ejecución inmediata de supresión de datos personales al
   // iniciar el servidor, para cubrir el periodo en que pudo estar inactivo.
   // Cumple con el principio de supresión oportuna (LFPDPPP Art. 11).
-  vencerPermisosExpirados();
-  limpiarTrabajadoresSinPermiso();
-  limpiarDocumentosVisitas();
+  // vencerPermisosExpirados() escribe en cerrado_sin_salida, así que se espera a
+  // que las migraciones de esas columnas hayan terminado.
+  migracionesPermisos.finally(() => {
+    vencerPermisosExpirados();
+    limpiarTrabajadoresSinPermiso();
+    limpiarDocumentosVisitas();
 
-  // Programa la supresión automática diaria a las 01:00 h (hora del servidor).
-  programarVencimiento();
+    // Programa la supresión automática diaria a las 01:00 h (hora del servidor).
+    programarVencimiento();
+  });
 });
